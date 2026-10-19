@@ -87,7 +87,8 @@ def build_simulation_html(car_data):
     # </script> 삽입을 막고 기존 Garage 값의 JSON 구조는 그대로 유지합니다.
     payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
     metrics = "".join(
-        f"<div class='metric'><span>{html.escape(name)}</span><b>{float(car_data['performance'].get(key, 50)):.0f}</b></div>"
+        f"<div class='metric'><div class='metricHead'><span>{html.escape(name)}</span><b>{max(0,min(100,float(car_data['performance'].get(key, 50)))):.0f}</b></div>"
+        f"<div class='metricBar'><i style='width:{max(0,min(100,float(car_data['performance'].get(key, 50)))):.0f}%'></i></div></div>"
         for name, key in zip(METRICS, ("downforce", "topSpeed", "cornering", "grip", "braking", "stability"))
     )
     return (SIMULATION_HTML.replace("__DATA__", payload)
@@ -108,7 +109,7 @@ def main():
                 "<div class='step'>MY 3D F1 CAR · TRACK TEST CIRCUIT</div></div>",
                 unsafe_allow_html=True)
     # 성능도 같은 iframe 안에 배치하여 준비/주행 전환 시 함께 표시·숨김 처리합니다.
-    components.html(build_simulation_html(car_data), height=855, scrolling=False)
+    components.html(build_simulation_html(car_data), height=560, scrolling=False)
 
 
 SIMULATION_HTML = r'''<!doctype html><html lang="ko"><head><meta charset="utf-8">
@@ -123,16 +124,16 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 #overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;pointer-events:none;text-align:center;text-shadow:0 3px 10px #000}
 #overlay h1{margin:0;font-size:clamp(35px,8vw,88px);color:#ff3158}#overlay p{margin:6px;font-size:clamp(14px,2vw,22px)}
 #start{pointer-events:auto;cursor:pointer;margin:0 0 13px;padding:14px 27px;border:1px solid #ff6681;background:#e51d45;color:white;font-weight:900;font-size:17px}
-#pause{pointer-events:auto;position:absolute;right:12px;bottom:14px;cursor:pointer;background:#091725;color:#fff;border:1px solid #27d6ff;padding:8px 11px;font-weight:bold}#previewPanels{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column}
-.previewTitle{height:31px;padding:7px 13px;background:#0b1520e8;color:#ccd6e2;font-weight:bold;font-size:13px;letter-spacing:2px}
-#trackPanel{height:315px;border:1px solid #364555}#carPanel{height:235px;border:1px solid #364555;border-top:0}
-#performancePanel{height:228px;background:#0b1520;border:1px solid #364555;padding:0 13px}
-.metric{display:flex;justify-content:space-between;padding:5px 1px;border-bottom:1px solid #263541;font-size:12px}.metric b{color:#27d6ff}
+#pause{pointer-events:auto;position:absolute;right:12px;bottom:14px;cursor:pointer;background:#091725;color:#fff;border:1px solid #27d6ff;padding:8px 11px;font-weight:bold}#previewPanels{position:absolute;top:0;left:0;right:0;height:480px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:8px;pointer-events:none}
+.previewTitle{height:38px;padding:11px 13px;background:#101b27;color:#ccd6e2;font-weight:bold;font-size:13px;letter-spacing:2px}
+#trackPanel,#carPanel{position:relative;height:100%;min-width:0;border:1px solid #364555;background:#0d1821}#carPanel{background:transparent;pointer-events:auto;touch-action:none;cursor:grab}#carPanel:active{cursor:grabbing}#trackSvg{width:100%;height:calc(100% - 38px);display:block;background:#101c22}
+#performancePanel{height:100%;min-width:0;background:#0b1520;border:1px solid #364555;padding:0 13px}
+.metric{padding:10px 1px;border-bottom:1px solid #263541;font-size:12px}.metricHead{display:flex;justify-content:space-between;margin-bottom:6px}.metric b{color:#27d6ff}.metricBar{height:8px;background:#263747;overflow:hidden}.metricBar i{display:block;height:100%;background:linear-gradient(90deg,#27d6ff,#8065ff)}@media(max-width:780px){.previewTitle{font-size:10px;letter-spacing:0;padding:12px 5px}.metric{font-size:10px;padding:9px 0}#previewPanels{gap:4px;padding:4px}}
 #back{pointer-events:auto;position:absolute;right:115px;bottom:14px;cursor:pointer;background:#091725;color:#fff;border:1px solid #27d6ff;padding:8px 11px;font-weight:bold}
 #result{display:none;background:#08111eea;border:1px solid #ff3158;padding:20px;line-height:1.8;min-width:min(340px,85vw)}
 #result strong{color:#ff3158;font-size:23px}#error{position:absolute;left:12px;bottom:10px;color:#ff7186;background:#08111e}
 </style><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.164.1/build/three.module.js"}}</script>
-</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><button id="pause" hidden>⏸ PAUSE</button><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><button id="back" hidden>↩ PREPARATION</button>
+</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><button id="pause" hidden>⏸ PAUSE</button><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><button id="back" hidden>↩ PREPARATION</button>
 <div id="overlay"><p id="message"></p><h1 id="count"></h1><button id="start">SIMULATION START</button><div id="result"></div></div><div id="error"></div></div>
 <script type="module">
 import * as THREE from 'three';
@@ -171,6 +172,25 @@ function createTrack(){
 createTrack();
 // 준비 화면의 두 뷰는 동일한 트랙 객체와 동일한 Garage 차량 객체를 번갈아 렌더링합니다.
 const trackObjects=scene.children.filter(obj=>!obj.isLight && obj!==ground);
+// 주행에 사용하는 동일한 curve를 위에서 본 2D SVG 중심선으로 투영합니다.
+const svg=document.getElementById('trackSvg');
+const points=Array.from({length:201},(_,i)=>curve.getPointAt(i/200));
+const xs=points.map(p=>p.x),zs=points.map(p=>p.z);
+const minX=Math.min(...xs),maxX=Math.max(...xs),minZ=Math.min(...zs),maxZ=Math.max(...zs);
+const scale=Math.min(264/(maxX-minX),310/(maxZ-minZ));
+const xy=p=>[160+(p.x-(minX+maxX)/2)*scale,195+(p.z-(minZ+maxZ)/2)*scale];
+const path=points.map((p,i)=>`${i?'L':'M'}${xy(p)[0].toFixed(1)} ${xy(p)[1].toFixed(1)}`).join(' ')+' Z';
+const start=frameAt(0),[sx,sy]=xy(start.p),[ex,ey]=xy(start.p.clone().addScaledVector(start.side,roadWidth/2));
+const dx=ex-sx,dy=ey-sy;
+svg.innerHTML=`<path d="${path}" fill="none" stroke="#586778" stroke-width="${(roadWidth*scale+4).toFixed(1)}" stroke-linejoin="round"/><path d="${path}" fill="none" stroke="#303740" stroke-width="${(roadWidth*scale).toFixed(1)}" stroke-linejoin="round"/><path d="${path}" fill="none" stroke="#abb5c0" stroke-width="1" stroke-dasharray="5 8"/><line x1="${sx-dx}" y1="${sy-dy}" x2="${sx+dx}" y2="${sy+dy}" stroke="white" stroke-width="5" stroke-dasharray="4 3"/>`;
+// 준비 화면 전용 Orbit 스타일 드래그/휠. 주행 카메라 함수는 변경하지 않습니다.
+const carPanel=document.getElementById('carPanel');
+let orbitYaw=.65,orbitPitch=.34,orbitRadius=16,dragPointer=null,lastX=0,lastY=0;
+carPanel.addEventListener('pointerdown',e=>{if(phase!=='preview')return;dragPointer=e.pointerId;lastX=e.clientX;lastY=e.clientY;carPanel.setPointerCapture(e.pointerId)});
+carPanel.addEventListener('pointermove',e=>{if(phase!=='preview'||e.pointerId!==dragPointer)return;orbitYaw+=(e.clientX-lastX)*.008;orbitPitch=Math.max(-.25,Math.min(1.1,orbitPitch+(e.clientY-lastY)*.006));lastX=e.clientX;lastY=e.clientY});
+carPanel.addEventListener('pointerup',e=>{if(e.pointerId===dragPointer)dragPointer=null});
+carPanel.addEventListener('pointercancel',()=>{dragPointer=null});
+carPanel.addEventListener('wheel',e=>{if(phase!=='preview')return;e.preventDefault();orbitRadius=Math.max(11,Math.min(25,orbitRadius*Math.exp(e.deltaY*.001)))},{passive:false});
 function score(name){let n=Number(DATA.car.performance[name]);return Number.isFinite(n)?Math.max(0,Math.min(1,n/100)):.5}
 function createPlayerCar(){let mesh=createF1Car(0xff1748,DATA.car.appearance);scene.add(mesh);return {mesh,progress:0,laps:0,speed:0,finished:false,base:1,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity}}
 function createAICars(){return [.97,1.01,.95,1.02].map((base,i)=>{let mesh=createF1Car([0x24bbfa,0xfcc935,0x8de76b,0xb277fa][i],DATA.car.appearance);scene.add(mesh);return {mesh,progress:0,laps:0,speed:0,finished:false,base,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity}})}
@@ -225,24 +245,21 @@ function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last
   if(phase==='countdown'){let remaining=countEnd-now;document.getElementById('count').textContent=remaining>1000?String(Math.ceil((remaining-1000)/1000)):'GO';updateCamera(dt);if(remaining<=0)startSimulation(now)}
   else if(phase==='running'&&!isPaused){elapsed+=dt;updatePlayerCar(dt,elapsed);updateAICars(dt,elapsed);updateCamera(dt);updateHUD();if(player.finished)finishSimulation()}
   if(phase==='preview'){
-    const w=root.clientWidth,h=root.clientHeight,dpr=renderer.getPixelRatio();
-    const trackHeight=315,carHeight=235;
-    renderer.setScissorTest(true);
-    // 트랙 전용 뷰: 준비 화면에는 모든 차량을 숨깁니다.
-    cars.forEach(car=>car.mesh.visible=false);trackObjects.forEach(obj=>obj.visible=true);
-    camera.aspect=w/trackHeight;camera.updateProjectionMatrix();
-    const distance=Math.max(125,125/camera.aspect);camera.position.set(-12,distance*.85,64);camera.lookAt(0,0,0);
-    renderer.setViewport(0,(h-trackHeight)*dpr,w*dpr,trackHeight*dpr);
-    renderer.setScissor(0,(h-trackHeight)*dpr,w*dpr,trackHeight*dpr);renderer.render(scene,camera);
-    // 차량 전용 뷰: 트랙을 숨기고 동일한 player.mesh를 클로즈업합니다.
+    // 왼쪽 SVG에는 차량이 없고 가운데에는 기존 Three.js 차량만 렌더링합니다.
+    const box=carPanel.getBoundingClientRect(),outer=root.getBoundingClientRect(),dpr=renderer.getPixelRatio();
+    const x=Math.round((box.left-outer.left)*dpr),y=Math.round((outer.bottom-box.bottom)*dpr);
+    const w=Math.max(1,Math.round(box.width*dpr)),h=Math.max(1,Math.round(box.height*dpr));
     trackObjects.forEach(obj=>obj.visible=false);ground.visible=false;player.mesh.visible=true;
-    camera.aspect=w/carHeight;camera.updateProjectionMatrix();
-    camera.position.copy(player.mesh.position).add(new THREE.Vector3(11,8,15));
-    camera.lookAt(player.mesh.position.x,player.mesh.position.y,player.mesh.position.z);
-    renderer.setViewport(0,(h-trackHeight-carHeight)*dpr,w*dpr,carHeight*dpr);
-    renderer.setScissor(0,(h-trackHeight-carHeight)*dpr,w*dpr,carHeight*dpr);renderer.render(scene,camera);
-    renderer.setScissorTest(false);trackObjects.forEach(obj=>obj.visible=true);ground.visible=true;
     camera.aspect=w/h;camera.updateProjectionMatrix();
+    const center=player.mesh.position;
+    camera.position.set(center.x+orbitRadius*Math.sin(orbitYaw)*Math.cos(orbitPitch),
+      center.y+orbitRadius*Math.sin(orbitPitch)+2,
+      center.z+orbitRadius*Math.cos(orbitYaw)*Math.cos(orbitPitch));
+    camera.lookAt(center.x,center.y,center.z);
+    renderer.setScissorTest(true);renderer.setViewport(x,y,w,h);renderer.setScissor(x,y,w,h);
+    renderer.render(scene,camera);renderer.setScissorTest(false);
+    trackObjects.forEach(obj=>obj.visible=true);ground.visible=true;
+    camera.aspect=root.clientWidth/root.clientHeight;camera.updateProjectionMatrix();
   }else{player.mesh.visible=true;renderer.setViewport(0,0,root.clientWidth*renderer.getPixelRatio(),root.clientHeight*renderer.getPixelRatio());renderer.render(scene,camera)}
 }requestAnimationFrame(animate);
 </script></body></html>'''
