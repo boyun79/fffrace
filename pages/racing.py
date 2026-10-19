@@ -86,10 +86,15 @@ def build_simulation_html(car_data):
     data = {"car": car_data, "laps": TOTAL_LAPS}
     # </script> 삽입을 막고 기존 Garage 값의 JSON 구조는 그대로 유지합니다.
     payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+    # Garage의 .perf 카드 구조를 재사용합니다. 변화량은 저장되지 않으므로 표시하지 않습니다.
     metrics = "".join(
-        f"<div class='metric'><div class='metricHead'><span>{html.escape(name)}</span><b>{max(0,min(100,float(car_data['performance'].get(key, 50)))):.0f}</b></div>"
-        f"<div class='metricBar'><i style='width:{max(0,min(100,float(car_data['performance'].get(key, 50)))):.0f}%'></i></div></div>"
-        for name, key in zip(METRICS, ("downforce", "topSpeed", "cornering", "grip", "braking", "stability"))
+        f"<div class='perf'><div class='perf-top'><div class='perf-name'>{label}</div>"
+        f"<div class='perf-num'>{html.escape(str(car_data['performance'][key]))}</div></div>"
+        f"<div class='track'><div class='fill' style='width:{max(0, min(100, float(car_data['performance'][key]))):.0f}%'></div></div></div>"
+        for label, key in zip(
+            ("DOWNFORCE", "TOP SPEED", "CORNERING", "GRIP", "BRAKING", "STABILITY"),
+            ("downforce", "topSpeed", "cornering", "grip", "braking", "stability"),
+        )
     )
     return (SIMULATION_HTML.replace("__DATA__", payload)
             .replace("__CAR_BUILDER__", BUILDER_JS)
@@ -115,6 +120,7 @@ def main():
 SIMULATION_HTML = r'''<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700&display=swap');
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#071019;color:#fff;font-family:Arial,sans-serif} [hidden]{display:none!important}
 #game{position:relative;width:100%;height:100%;overflow:hidden;background:#071019}
 canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;pointer-events:none;overflow:hidden}
@@ -127,8 +133,9 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 #pause{pointer-events:auto;position:absolute;right:12px;bottom:14px;cursor:pointer;background:#091725;color:#fff;border:1px solid #27d6ff;padding:8px 11px;font-weight:bold}#previewPanels{position:absolute;top:0;left:0;right:0;height:480px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:8px;pointer-events:none}
 .previewTitle{height:38px;padding:11px 13px;background:#101b27;color:#ccd6e2;font-weight:bold;font-size:13px;letter-spacing:2px}
 #trackPanel,#carPanel{position:relative;height:100%;min-width:0;border:1px solid #364555;background:#0d1821}#carPanel{background:transparent;pointer-events:auto;touch-action:none;cursor:grab}#carPanel:active{cursor:grabbing}#trackSvg{width:100%;height:calc(100% - 38px);display:block;background:#101c22}
-#performancePanel{height:100%;min-width:0;background:#0b1520;border:1px solid #364555;padding:0 13px}
-.metric{padding:10px 1px;border-bottom:1px solid #263541;font-size:12px}.metricHead{display:flex;justify-content:space-between;margin-bottom:6px}.metric b{color:#27d6ff}.metricBar{height:8px;background:#263747;overflow:hidden}.metricBar i{display:block;height:100%;background:linear-gradient(90deg,#27d6ff,#8065ff)}@media(max-width:780px){.previewTitle{font-size:10px;letter-spacing:0;padding:12px 5px}.metric{font-size:10px;padding:9px 0}#previewPanels{gap:4px;padding:4px}}
+#performancePanel{height:100%;min-width:0;background:#0b1520;border:1px solid #364555;padding:0 13px;overflow:auto}
+.perf{position:relative;padding:11px 10px;margin:8px 0;background:#0d131a;border:1px solid #26313d;border-radius:3px}.perf-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}.perf-name{font:700 13px 'Oxanium';color:#fff;letter-spacing:.5px}.perf-num{font:700 17px 'Oxanium';white-space:nowrap}.track{height:13px;background:#222b35;margin-top:9px;overflow:hidden;border:1px solid #33404d;transform:skewX(-12deg)}.fill{height:100%;background:linear-gradient(90deg,#27d6ff,#7b61ff);box-shadow:0 0 12px #27d6ff77;transition:width .35s ease}.perf:nth-of-type(even) .fill{background:linear-gradient(90deg,#20d7c7,#27d6ff)}
+@media(max-width:780px){.previewTitle{font-size:10px;letter-spacing:0;padding:12px 5px}.metric{font-size:10px;padding:9px 0}#previewPanels{gap:4px;padding:4px}}
 #back{pointer-events:auto;position:absolute;right:115px;bottom:14px;cursor:pointer;background:#091725;color:#fff;border:1px solid #27d6ff;padding:8px 11px;font-weight:bold}
 #result{display:none;background:#08111eea;border:1px solid #ff3158;padding:20px;line-height:1.8;min-width:min(340px,85vw)}
 #result strong{color:#ff3158;font-size:23px}#error{position:absolute;left:12px;bottom:10px;color:#ff7186;background:#08111e}
@@ -199,7 +206,7 @@ const player=createPlayerCar(),ais=[];let cars=[player];
 function placeCar(car,index){const f=frameAt(car.progress),offset=index===0?0:(index%2? -2.2:2.2);car.mesh.position.copy(f.p).addScaledVector(f.side,offset);car.mesh.position.y=1.20;car.mesh.rotation.y=Math.atan2(-f.v.x,-f.v.z)+Math.PI}
 cars.forEach((car,i)=>{car.progress=i===0?0:1-i*.009;placeCar(car,i)});
 // 랩 완주 전 코너 반경을 미리 읽어 자연스럽게 감속하고 탈출할 때 가속합니다.
-function cornerSeverity(t){let a=curve.getTangentAt((t+.012)%1),b=curve.getTangentAt((t+.035)%1);return Math.min(1,a.angleTo(b)*5.0)}
+function cornerSeverity(t){let a=curve.getTangentAt((t+1+.012)%1),b=curve.getTangentAt((t+1+.035)%1);return Math.min(1,a.angleTo(b)*5.0)}
 function updateCar(car,dt,elapsed,index){if(car.finished)return;
   const isPlayer=index===0,turn=cornerSeverity(car.progress),playerTop=235+score('topSpeed')*95,top=isPlayer?playerTop:playerTop*car.base;
   const playerCorner=.48+.22*score('cornering')+.13*score('downforce')+.10*score('grip');
@@ -224,8 +231,8 @@ function updateCamera(dt){let f=frameAt(player.progress);targetCamera.copy(playe
 function updateHUD(){document.getElementById('position').textContent=rank()+' / 5';document.getElementById('lap').textContent=Math.min(3,player.laps+1)+' / 3';document.getElementById('speed').textContent=Math.round(player.speed)}
 let phase='preview',countEnd=0,startTime=0,lastFrame=performance.now(),elapsed=0,isPaused=false;
 document.getElementById('pause').addEventListener('click',()=>{if(phase!=='running')return;isPaused=!isPaused;document.getElementById('pause').textContent=isPaused?'▶ RESUME':'⏸ PAUSE'});
-function startCountdown(){if(phase!=='preview')return;phase='countdown';document.getElementById('start').hidden=true;document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
-function startSimulation(now){document.getElementById('previewPanels').hidden=true;document.getElementById('back').hidden=false;ais.push(...createAICars());cars=[player,...ais];cars.forEach((car,i)=>{if(i){car.progress=1-i*.009;placeCar(car,i)}});phase='running';startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
+function startCountdown(){if(phase!=='preview')return;phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-16).add(new THREE.Vector3(0,8,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
+function startSimulation(now){document.getElementById('back').hidden=false;ais.push(...createAICars());cars=[player,...ais];cars.forEach((car,i)=>{if(i){car.progress=-(i*3)/length;placeCar(car,i)}});phase='running';startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
 function finishSimulation(){phase='complete';document.getElementById('back').hidden=false;document.getElementById('overlay').style.display='flex';document.getElementById('result').style.display='block';document.getElementById('result').innerHTML='<strong>SIMULATION COMPLETE</strong><br>POSITION '+rank()+' / 5<br>LAPS 3<br>TOP SPEED '+Math.round(player.top)+' km/h<br>LAP TIME '+player.lastLap.toFixed(2)+' sec<br>BEST LAP '+player.best.toFixed(2)+' sec';document.getElementById('hud').hidden=true;document.getElementById('pause').hidden=true}
 function resetSimulation(){
   ais.forEach(car=>scene.remove(car.mesh));ais.length=0;cars=[player];
@@ -242,8 +249,8 @@ function handleResize(){let w=Math.max(root.clientWidth,1),h=Math.max(root.clien
 window.addEventListener('resize',handleResize);new ResizeObserver(handleResize).observe(root);handleResize();document.getElementById('start').addEventListener('click',startCountdown);document.getElementById('back').addEventListener('click',resetSimulation);
 // requestAnimationFrame은 모든 상태에서 유지되므로 카운트다운 뒤에도 캔버스가 사라지지 않습니다.
 function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-lastFrame)/1000,.05);lastFrame=now;
-  if(phase==='countdown'){let remaining=countEnd-now;document.getElementById('count').textContent=remaining>1000?String(Math.ceil((remaining-1000)/1000)):'GO';updateCamera(dt);if(remaining<=0)startSimulation(now)}
-  else if(phase==='running'&&!isPaused){elapsed+=dt;updatePlayerCar(dt,elapsed);updateAICars(dt,elapsed);updateCamera(dt);updateHUD();if(player.finished)finishSimulation()}
+  if(phase==='countdown'){let remaining=countEnd-now;document.getElementById('count').textContent=remaining>1000?String(Math.ceil((remaining-1000)/1000)):'RACE START!';updateCamera(dt);if(remaining<=0)startSimulation(now)}
+  else if(phase==='running'&&!isPaused){elapsed+=dt;updatePlayerCar(dt,elapsed);updateAICars(dt,elapsed);updateCamera(dt);updateHUD();if(player.finished&&ais.every(car=>car.finished))finishSimulation()}
   if(phase==='preview'){
     // 왼쪽 SVG에는 차량이 없고 가운데에는 기존 Three.js 차량만 렌더링합니다.
     const box=carPanel.getBoundingClientRect(),outer=root.getBoundingClientRect(),dpr=renderer.getPixelRatio();
