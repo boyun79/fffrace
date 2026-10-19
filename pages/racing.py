@@ -136,11 +136,12 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 #performancePanel{height:100%;min-width:0;background:#0b1520;border:1px solid #364555;padding:0 13px;overflow:auto}
 .perf{position:relative;padding:11px 10px;margin:8px 0;background:#0d131a;border:1px solid #26313d;border-radius:3px}.perf-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}.perf-name{font:700 13px 'Oxanium';color:#fff;letter-spacing:.5px}.perf-num{font:700 17px 'Oxanium';white-space:nowrap}.track{height:13px;background:#222b35;margin-top:9px;overflow:hidden;border:1px solid #33404d;transform:skewX(-12deg)}.fill{height:100%;background:linear-gradient(90deg,#27d6ff,#7b61ff);box-shadow:0 0 12px #27d6ff77;transition:width .35s ease}.perf:nth-of-type(even) .fill{background:linear-gradient(90deg,#20d7c7,#27d6ff)}
 @media(max-width:780px){.previewTitle{font-size:10px;letter-spacing:0;padding:12px 5px}.metric{font-size:10px;padding:9px 0}#previewPanels{gap:4px;padding:4px}}
+#raceMap{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:min(178px,27vw);height:206px;padding:5px 7px;background:#091522ed;border:1px solid #365161;pointer-events:none;text-align:center;color:#b9d6e4;font:700 11px Oxanium,Arial,sans-serif;z-index:3}#raceMap svg{display:block;width:100%;height:174px}#raceMap .legend{font-size:9px;color:#b9cbd5;white-space:nowrap}@media(max-width:580px){#raceMap{width:116px;height:158px}#raceMap svg{height:125px}#raceMap .legend{font-size:7px}}
 #back{pointer-events:auto;position:absolute;right:115px;bottom:14px;cursor:pointer;background:#091725;color:#fff;border:1px solid #27d6ff;padding:8px 11px;font-weight:bold}
 #result{display:none;background:#08111eea;border:1px solid #ff3158;padding:20px;line-height:1.8;min-width:min(340px,85vw)}
 #result strong{color:#ff3158;font-size:23px}#error{position:absolute;left:12px;bottom:10px;color:#ff7186;background:#08111e}
 </style><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.164.1/build/three.module.js"}}</script>
-</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><button id="pause" hidden>⏸ PAUSE</button><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><button id="back" hidden>↩ PREPARATION</button>
+</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><button id="pause" hidden>⏸ PAUSE</button><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div></div><button id="back" hidden>↩ PREPARATION</button>
 <div id="overlay"><p id="message"></p><h1 id="count"></h1><button id="start">SIMULATION START</button><div id="result"></div></div><div id="error"></div></div>
 <script type="module">
 import * as THREE from 'three';
@@ -202,6 +203,24 @@ function score(name){let n=Number(DATA.car.performance[name]);return Number.isFi
 function createPlayerCar(){let mesh=createF1Car(0xff1748,DATA.car.appearance);scene.add(mesh);return {mesh,progress:0,laps:0,speed:0,finished:false,base:1,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity}}
 function createAICars(){return [.97,1.01,.95,1.02].map((base,i)=>{let mesh=createF1Car([0x24bbfa,0xfcc935,0x8de76b,0xb277fa][i],DATA.car.appearance);scene.add(mesh);return {mesh,progress:0,laps:0,speed:0,finished:false,base,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity}})}
 const player=createPlayerCar(),ais=[];let cars=[player];
+// 미니맵은 준비 화면과 같은 2D 경로를 쓰고 실제 차량 Mesh 위치만 투영합니다.
+const mapSvg=document.getElementById('mapSvg'),raceMap=document.getElementById('raceMap');
+mapSvg.innerHTML=svg.innerHTML;
+const mapMarkers=[];
+function updateMinimap(){
+  cars.forEach((car,i)=>{
+    if(!mapMarkers[i]){
+      const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('r',i===0?'8':'6');dot.setAttribute('fill',i===0?'#27d6ff':['#24bbfa','#fcc935','#8de76b','#b277fa'][i-1]);
+      dot.setAttribute('stroke','#071019');dot.setAttribute('stroke-width','3');
+      mapSvg.appendChild(dot);mapMarkers[i]=dot;
+    }
+    const [x,y]=xy(car.mesh.position);
+    mapMarkers[i].setAttribute('cx',x);mapMarkers[i].setAttribute('cy',y);
+  });
+  mapMarkers.slice(cars.length).forEach(dot=>dot.remove());mapMarkers.length=cars.length;
+}
+
 // 차량은 출발선 근처 5열 그리드에 놓되, 선수차는 정확히 출발선 위에 둡니다.
 function placeCar(car,index){const f=frameAt(car.progress),offset=index===0?0:(index%2? -2.2:2.2);car.mesh.position.copy(f.p).addScaledVector(f.side,offset);car.mesh.position.y=1.20;car.mesh.rotation.y=Math.atan2(-f.v.x,-f.v.z)+Math.PI}
 cars.forEach((car,i)=>{car.progress=i===0?0:1-i*.009;placeCar(car,i)});
@@ -231,8 +250,15 @@ function updateCamera(dt){let f=frameAt(player.progress);targetCamera.copy(playe
 function updateHUD(){document.getElementById('position').textContent=rank()+' / 5';document.getElementById('lap').textContent=Math.min(3,player.laps+1)+' / 3';document.getElementById('speed').textContent=Math.round(player.speed)}
 let phase='preview',countEnd=0,startTime=0,lastFrame=performance.now(),elapsed=0,isPaused=false;
 document.getElementById('pause').addEventListener('click',()=>{if(phase!=='running')return;isPaused=!isPaused;document.getElementById('pause').textContent=isPaused?'▶ RESUME':'⏸ PAUSE'});
-function startCountdown(){if(phase!=='preview')return;phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-16).add(new THREE.Vector3(0,8,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
-function startSimulation(now){document.getElementById('back').hidden=false;ais.push(...createAICars());cars=[player,...ais];cars.forEach((car,i)=>{if(i){car.progress=-(i*3)/length;placeCar(car,i)}});phase='running';startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
+function startCountdown(){if(phase!=='preview')return;
+  // 출발 직전에 한 번만 기존 AI 객체를 만들고, 카운트다운과 레이스에 계속 사용합니다.
+  ais.push(...createAICars());cars=[player,...ais];
+  cars.forEach((car,i)=>{
+    car.progress=i===0?0:-(Math.ceil(i/2)*6)/length;
+    car.laps=0;car.speed=0;placeCar(car,i);
+  });
+  raceMap.hidden=false;updateMinimap();phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-27).add(new THREE.Vector3(0,19,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
+function startSimulation(now){document.getElementById('back').hidden=false;phase='running';startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
 function finishSimulation(){phase='complete';document.getElementById('back').hidden=false;document.getElementById('overlay').style.display='flex';document.getElementById('result').style.display='block';document.getElementById('result').innerHTML='<strong>SIMULATION COMPLETE</strong><br>POSITION '+rank()+' / 5<br>LAPS 3<br>TOP SPEED '+Math.round(player.top)+' km/h<br>LAP TIME '+player.lastLap.toFixed(2)+' sec<br>BEST LAP '+player.best.toFixed(2)+' sec';document.getElementById('hud').hidden=true;document.getElementById('pause').hidden=true}
 function resetSimulation(){
   ais.forEach(car=>scene.remove(car.mesh));ais.length=0;cars=[player];
@@ -240,7 +266,7 @@ function resetSimulation(){
   placeCar(player,0);elapsed=0;countEnd=0;isPaused=false;phase='preview';
   document.getElementById('pause').textContent='⏸ PAUSE';document.getElementById('pause').hidden=true;
   document.getElementById('back').hidden=true;document.getElementById('hud').hidden=true;
-  document.getElementById('previewPanels').hidden=false;document.getElementById('start').hidden=false;
+  document.getElementById('previewPanels').hidden=false;raceMap.hidden=true;mapMarkers.forEach(dot=>dot.remove());mapMarkers.length=0;document.getElementById('start').hidden=false;
   document.getElementById('overlay').style.display='flex';document.getElementById('overlay').style.justifyContent='flex-end';document.getElementById('message').textContent='';
   document.getElementById('result').style.display='none';document.getElementById('count').textContent='';
   updateHUD();handleResize();
@@ -249,8 +275,8 @@ function handleResize(){let w=Math.max(root.clientWidth,1),h=Math.max(root.clien
 window.addEventListener('resize',handleResize);new ResizeObserver(handleResize).observe(root);handleResize();document.getElementById('start').addEventListener('click',startCountdown);document.getElementById('back').addEventListener('click',resetSimulation);
 // requestAnimationFrame은 모든 상태에서 유지되므로 카운트다운 뒤에도 캔버스가 사라지지 않습니다.
 function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-lastFrame)/1000,.05);lastFrame=now;
-  if(phase==='countdown'){let remaining=countEnd-now;document.getElementById('count').textContent=remaining>1000?String(Math.ceil((remaining-1000)/1000)):'RACE START!';updateCamera(dt);if(remaining<=0)startSimulation(now)}
-  else if(phase==='running'&&!isPaused){elapsed+=dt;updatePlayerCar(dt,elapsed);updateAICars(dt,elapsed);updateCamera(dt);updateHUD();if(player.finished&&ais.every(car=>car.finished))finishSimulation()}
+  if(phase==='countdown'){let remaining=countEnd-now;document.getElementById('count').textContent=remaining>1000?String(Math.ceil((remaining-1000)/1000)):'RACE START!';updateMinimap();if(remaining<=0)startSimulation(now)}
+  else if(phase==='running'&&!isPaused){elapsed+=dt;updatePlayerCar(dt,elapsed);updateAICars(dt,elapsed);updateCamera(dt);updateHUD();updateMinimap();if(player.finished&&ais.every(car=>car.finished))finishSimulation()}
   if(phase==='preview'){
     // 왼쪽 SVG에는 차량이 없고 가운데에는 기존 Three.js 차량만 렌더링합니다.
     const box=carPanel.getBoundingClientRect(),outer=root.getBoundingClientRect(),dpr=renderer.getPixelRatio();
