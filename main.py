@@ -132,7 +132,7 @@ def apply_game_css():
     :root{--bg:#080b10;--panel:#10151d;--line:#27313d;--muted:#8290a0;--red:#ff3158;--cyan:#27d6ff}
     .stApp{background:radial-gradient(circle at 52% 17%,#202a36 0,#090c11 47%,#05070a 100%);color:#eef3f8}
     .block-container{max-width:1680px;padding:1rem 1.4rem 2rem}.stApp,button{font-family:'Noto Sans KR',sans-serif}
-    h1,h2,h3,.race{font-family:'Oxanium','Noto Sans KR',sans-serif}
+    h1,h2,h3,.race{font-family:'Oxanium','Noto Sans KR',sans-serif}header,#MainMenu,footer{visibility:hidden}
     .garage-head{display:flex;align-items:center;justify-content:space-between;border-top:3px solid var(--red);border-bottom:1px solid var(--line);padding:10px 16px;background:#0c1118;margin-bottom:10px}
     .logo{font:700 25px 'Oxanium';letter-spacing:2px}.logo b{color:var(--red)}.step{font:600 11px 'Oxanium';color:#8794a3;letter-spacing:2px}
     .intro{display:flex;gap:22px;align-items:center;padding:9px 15px;margin-bottom:12px;background:#10161ed9;border:1px solid #27313d;color:#c5cfda;font-size:12px}.intro strong{color:#fff;font:700 14px 'Oxanium'}
@@ -493,8 +493,40 @@ def render_performance_panel(performance, previous_performance, differences, cha
 # -----------------------------------------------------------------------------
 def main():
     """데이터 준비 → 사용자 입력 → 계산 → 3D 및 UI 렌더링 순서로 앱을 실행합니다."""
-    st.set_page_config(page_title="F1 Physics Garage 3D", page_icon="🏁", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="F1 Physics Garage 3D", page_icon="🏁", layout="wide", initial_sidebar_state="collapsed")
     apply_game_css()
+    if "app_view" not in st.session_state:
+        st.session_state.app_view = "home"
+    if st.session_state.app_view == "home":
+        st.markdown("""<style>
+        .home-wrap{max-width:950px;margin:9vh auto 0;text-align:center;padding:32px;color:#eff5fa}
+        .home-title{font-size:clamp(32px,5vw,58px);font-weight:900;letter-spacing:2px}
+        .home-title b{color:#ff3158}.home-sub{color:#a8bac9;margin:12px 0 35px}
+        .home-card{background:#101821;border:1px solid #344353;border-top:3px solid #27d6ff;
+        padding:24px;text-align:left;min-height:125px}.home-card h3{margin:0 0 10px}
+        .home-card p{color:#a8bac9;font-size:14px}.home-locked{border-top-color:#677481}
+        </style><div class='home-wrap'><div class='home-title'>F1 <b>PHYSICS</b></div>
+        <div class='home-sub'>차량을 설계하고 테스트 서킷에서 달려보세요</div></div>""", unsafe_allow_html=True)
+        ready = bool(
+            isinstance(st.session_state.get("my_car_config"), dict)
+            and isinstance(st.session_state.get("my_car_performance"), dict)
+            and all(key in st.session_state["my_car_config"] for key in get_part_data())
+            and all(key in st.session_state["my_car_performance"] for key in METRICS)
+        )
+        left, right = st.columns(2, gap="medium")
+        with left:
+            st.markdown("<div class='home-card'><h3>🏎 차량 설계하기</h3><p>Garage에서 파츠를 선택하고 내 F1 차량을 완성하세요.</p></div>", unsafe_allow_html=True)
+            if st.button("차량 설계하기", use_container_width=True):
+                st.session_state.app_view = "garage"
+                st.rerun()
+        with right:
+            st.markdown("<div class='home-card home-locked'><h3>🏁 레이싱 시뮬레이션</h3><p>" +
+                        ("설계한 차량으로 테스트 서킷을 달려보세요." if ready else "🔒 먼저 차량을 설계해 주세요.") +
+                        "</p></div>", unsafe_allow_html=True)
+            if st.button("레이싱 시뮬레이션", disabled=not ready,
+                         help=None if ready else "먼저 차량을 설계해 주세요.", use_container_width=True):
+                st.switch_page("pages/racing.py")
+        return
     parts = get_part_data()
 
     # 첫 실행에서는 모든 파츠를 다루기 쉬운 균형형 설정으로 시작합니다.
@@ -514,10 +546,25 @@ def main():
     selections = st.session_state.selections
     active_part = st.session_state.active_part
     current_performance = calculate_car_performance(parts, selections)
+    # Garage에 진입한 뒤 완성된 선택과 계산값을 기존 레이스 데이터 키로 공유합니다.
+    if all(key in selections and selections[key] in parts[key]["options"] for key in parts):
+        st.session_state["my_car_config"] = dict(selections)
+        st.session_state["my_car_performance"] = dict(current_performance)
     previous_performance = st.session_state.get("change_before")
     differences = calculate_performance_difference(current_performance, previous_performance)
 
     st.markdown("<div class='garage-head'><div class='logo'>F1 <b>PHYSICS</b> GARAGE</div><div class='step'>BUILD 02 · INTERACTIVE 3D SETUP</div></div>", unsafe_allow_html=True)
+    nav_race, nav_home = st.columns(2)
+    with nav_race:
+        if st.button("🏁 레이싱 시뮬레이션 시작", disabled=not (
+            isinstance(st.session_state.get("my_car_config"), dict)
+            and isinstance(st.session_state.get("my_car_performance"), dict)
+        ), use_container_width=True):
+            st.switch_page("pages/racing.py")
+    with nav_home:
+        if st.button("⌂ 처음 화면으로 돌아가기", use_container_width=True):
+            st.session_state.app_view = "home"
+            st.rerun()
     render_help_message()
 
     left, center, right = st.columns([0.78, 2.45, 1.05], gap="medium")
