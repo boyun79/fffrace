@@ -106,14 +106,26 @@ def main():
                        layout="wide", initial_sidebar_state="expanded")
     apply_page_style()
     config, performance = load_my_car()
-    if not config or not performance:
-        st.warning("Garage에서 차량을 먼저 설계해 주세요.")
+    # 페이지 이동 버튼은 iframe 바깥에 두어 미니맵과 HUD를 가리지 않습니다.
+    garage_col, home_col = st.columns(2)
+    with garage_col:
+        if st.button("🏎 차량 설계 화면으로 돌아가기", use_container_width=True):
+            st.session_state.app_view = "garage"
+            st.switch_page("main.py")
+    with home_col:
+        if st.button("⌂ 처음 화면으로 돌아가기", use_container_width=True):
+            st.session_state.app_view = "home"
+            st.switch_page("main.py")
+    if not (config and performance) or not all(
+        key in config and config[key] in spec["options"]
+        for key, spec in GARAGE_VISUAL_OPTIONS.items()
+    ):
+        st.warning("먼저 차량을 설계해 주세요.")
         return
     car_data = prepare_car_data(config, performance)
     st.markdown("<div class='head'><div class='logo'>VIRTUAL <b>RACE</b></div>"
                 "<div class='step'>MY 3D F1 CAR · TRACK TEST CIRCUIT</div></div>",
                 unsafe_allow_html=True)
-    # 성능도 같은 iframe 안에 배치하여 준비/주행 전환 시 함께 표시·숨김 처리합니다.
     components.html(build_simulation_html(car_data), height=560, scrolling=False)
 
 
