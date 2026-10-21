@@ -1,4 +1,4 @@
-"""F1 Physics Garage
+"""F1 Racing Simulator Garage
 
 실행: streamlit run main.py
 필수 패키지: streamlit
@@ -131,8 +131,13 @@ def apply_game_css():
     @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@500;600;700&family=Noto+Sans+KR:wght@400;600;700&display=swap');
     :root{--bg:#080b10;--panel:#10151d;--line:#27313d;--muted:#8290a0;--red:#ff3158;--cyan:#27d6ff}
     .stApp{background:radial-gradient(circle at 52% 17%,#202a36 0,#090c11 47%,#05070a 100%);color:#eef3f8}
-    .block-container{max-width:1680px;padding:1rem 1.4rem 2rem}.stApp,button{font-family:'Noto Sans KR',sans-serif}
-    h1,h2,h3,.race{font-family:'Oxanium','Noto Sans KR',sans-serif}header,#MainMenu,footer{visibility:hidden}
+    .block-container{max-width:1680px;padding:0 clamp(.75rem,2vw,1.7rem) 2rem}.stApp,button{font-family:'Noto Sans KR',sans-serif}
+    h1,h2,h3,.race{font-family:'Oxanium','Noto Sans KR',sans-serif}/* 헤더를 단순히 투명하게 하지 않고 레이아웃 높이까지 제거합니다. */
+    [data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stSidebar"],
+    [data-testid="stSidebarCollapsedControl"],#MainMenu,footer{display:none!important}
+    [data-testid="stAppViewContainer"]{width:100%!important}
+    [data-testid="stMainBlockContainer"]{max-width:1680px!important;padding:0 clamp(.75rem,2vw,1.7rem) 2rem!important}
+    @media(max-width:800px){[data-testid="stMainBlockContainer"]{padding:0 .65rem 1.4rem!important}}
     .garage-head{display:flex;align-items:center;justify-content:space-between;border-top:3px solid var(--red);border-bottom:1px solid var(--line);padding:10px 16px;background:#0c1118;margin-bottom:10px}
     .logo{font:700 25px 'Oxanium';letter-spacing:2px}.logo b{color:var(--red)}.step{font:600 11px 'Oxanium';color:#8794a3;letter-spacing:2px}
     .intro{display:flex;gap:22px;align-items:center;padding:9px 15px;margin-bottom:12px;background:#10161ed9;border:1px solid #27313d;color:#c5cfda;font-size:12px}.intro strong{color:#fff;font:700 14px 'Oxanium'}
@@ -493,7 +498,7 @@ def render_performance_panel(performance, previous_performance, differences, cha
 # -----------------------------------------------------------------------------
 def main():
     """데이터 준비 → 사용자 입력 → 계산 → 3D 및 UI 렌더링 순서로 앱을 실행합니다."""
-    st.set_page_config(page_title="F1 Physics Garage 3D", page_icon="🏁", layout="wide", initial_sidebar_state="collapsed")
+    st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏁", layout="wide", initial_sidebar_state="collapsed")
     apply_game_css()
     if "app_view" not in st.session_state:
         st.session_state.app_view = "home"
@@ -505,8 +510,13 @@ def main():
         .home-card{background:#101821;border:1px solid #344353;border-top:3px solid #27d6ff;
         padding:24px;text-align:left;min-height:125px}.home-card h3{margin:0 0 10px}
         .home-card p{color:#a8bac9;font-size:14px}.home-locked{border-top-color:#677481}
-        </style><div class='home-wrap'><div class='home-title'>F1 <b>PHYSICS</b></div>
-        <div class='home-sub'>차량을 설계하고 테스트 서킷에서 달려보세요</div></div>""", unsafe_allow_html=True)
+        </style>""", unsafe_allow_html=True)
+        # CSS와 HTML을 분리합니다. 들여쓴 HTML이 Markdown 코드 블록으로 해석되지 않게 합니다.
+        st.markdown(
+            "<div class='home-wrap'><div class='home-title'>F1 <b>RACING SIMULATOR</b></div>"
+            "<div class='home-sub'>차량을 설계하고 테스트 서킷에서 달려보세요</div></div>",
+            unsafe_allow_html=True,
+        )
         ready = bool(
             isinstance(st.session_state.get("my_car_config"), dict)
             and isinstance(st.session_state.get("my_car_performance"), dict)
@@ -553,7 +563,7 @@ def main():
     previous_performance = st.session_state.get("change_before")
     differences = calculate_performance_difference(current_performance, previous_performance)
 
-    st.markdown("<div class='garage-head'><div class='logo'>F1 <b>PHYSICS</b> GARAGE</div><div class='step'>BUILD 02 · INTERACTIVE 3D SETUP</div></div>", unsafe_allow_html=True)
+    st.markdown("<div class='garage-head'><div class='logo'>F1 <b>RACING SIMULATOR</b> · GARAGE</div><div class='step'>BUILD 02 · INTERACTIVE 3D SETUP</div></div>", unsafe_allow_html=True)
     nav_race, nav_home = st.columns(2)
     with nav_race:
         if st.button("🏁 레이싱 시뮬레이션 시작", disabled=not (
