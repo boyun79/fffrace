@@ -1,4 +1,4 @@
-"""F1 Physics Garage - 3D 자동 주행 시뮬레이션
+"""F1 Racing Simulator - 3D 자동 주행 시뮬레이션
 
 이 파일만 pages/racing.py에 넣습니다. main.py는 수정하지 않습니다.
 """
@@ -68,10 +68,15 @@ def get_f1_car_builder_javascript():
 
 
 def apply_page_style():
-    """사이드바는 건드리지 않고 Racing 본문만 Garage 분위기로 꾸밉니다."""
+    """Garage와 같은 상단·사이드바 정책 및 본문 여백을 적용합니다."""
     st.markdown("""<style>
     @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700&family=Noto+Sans+KR:wght@400;700&display=swap');
-    .stApp{background:radial-gradient(circle at 50% 12%,#202b37,#090c11 48%,#05070a);color:#eff5fa}.block-container{max-width:1450px;padding-top:1rem}
+    .stApp{background:radial-gradient(circle at 50% 12%,#202b37,#090c11 48%,#05070a);color:#eff5fa}.block-container{max-width:1680px;padding:0 clamp(.75rem,2vw,1.7rem) 2rem}
+    [data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stSidebar"],
+    [data-testid="stSidebarCollapsedControl"],#MainMenu,footer{display:none!important}
+    [data-testid="stAppViewContainer"]{width:100%!important}
+    [data-testid="stMainBlockContainer"]{max-width:1680px!important;padding:0 clamp(.75rem,2vw,1.7rem) 2rem!important}
+    @media(max-width:800px){[data-testid="stMainBlockContainer"]{padding:0 .65rem 1.4rem!important}}
     .head{border-top:3px solid #ff3158;border-bottom:1px solid #2a3542;padding:12px 16px;background:#0c1118;display:flex;justify-content:space-between}.logo{font:700 25px Oxanium}.logo b{color:#ff3158}.step{font:11px Oxanium;color:#8492a0;letter-spacing:2px}
     .card{background:#0d131b;border:1px solid #2a3542;padding:14px}.title{font:700 12px Oxanium;letter-spacing:2px;color:#9aa8b6;border-bottom:1px solid #293542;padding-bottom:9px;margin-bottom:10px}.chips span{display:inline-block;padding:4px 7px;margin:3px;border:1px solid #354353;color:#9eacba;font-size:10px}.bar-row{margin:8px 0}.bar-top{display:flex;justify-content:space-between;font:700 11px Oxanium}.bar{height:9px;background:#232c36;margin-top:5px;transform:skewX(-12deg);overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#27d6ff,#8065ff)}
     div[data-testid='stButton'] button{width:100%!important;min-height:58px!important;background:#e51d45!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border:1px solid #ff6681!important;font:700 16px Oxanium!important}div[data-testid='stButton'] button *{color:#fff!important;-webkit-text-fill-color:#fff!important}.empty{max-width:650px;margin:90px auto;padding:30px;text-align:center;background:#0e141c;border-top:3px solid #ff3158}
@@ -102,8 +107,8 @@ def build_simulation_html(car_data):
 
 
 def main():
-    st.set_page_config(page_title="F1 3D Auto Simulation", page_icon="🏁",
-                       layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏁",
+                       layout="wide", initial_sidebar_state="collapsed")
     apply_page_style()
     config, performance = load_my_car()
     # 페이지 이동 버튼은 iframe 바깥에 두어 미니맵과 HUD를 가리지 않습니다.
@@ -123,7 +128,7 @@ def main():
         st.warning("먼저 차량을 설계해 주세요.")
         return
     car_data = prepare_car_data(config, performance)
-    st.markdown("<div class='head'><div class='logo'>VIRTUAL <b>RACE</b></div>"
+    st.markdown("<div class='head'><div class='logo'>F1 <b>RACING SIMULATOR</b></div>"
                 "<div class='step'>MY 3D F1 CAR · TRACK TEST CIRCUIT</div></div>",
                 unsafe_allow_html=True)
     components.html(build_simulation_html(car_data), height=560, scrolling=False)
