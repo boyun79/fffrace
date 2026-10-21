@@ -106,10 +106,46 @@ def build_simulation_html(car_data):
             .replace("__PERFORMANCE__", metrics))
 
 
+
+def _f1_layout_html(document):
+    """준비 화면의 고정 480px 패널을 유연한 높이와 좁은 화면 배치로 보완합니다."""
+    style = """<style id="f1-preparation-layout-v1">
+    html,body{height:auto!important;min-height:100%;overflow:auto!important}
+    #game{height:clamp(480px,86vh,680px)!important;min-height:480px}
+    #previewPanels{height:auto!important;top:0!important;bottom:100px!important;gap:10px!important;padding:8px!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;min-height:0}
+    #trackPanel,#carPanel,#performancePanel{height:100%!important;min-height:0!important;min-width:0}
+    #performancePanel{overflow:auto!important;overscroll-behavior:contain;scrollbar-gutter:stable;padding-bottom:18px!important}
+    .previewTitle{height:auto!important;min-height:38px;line-height:1.4;white-space:normal;overflow-wrap:anywhere}
+    #trackPanel,#carPanel{display:flex;flex-direction:column}
+    #trackSvg{height:auto!important;flex:1;min-height:0}
+    #start{max-width:calc(100% - 24px);white-space:normal}
+    @media(max-width:780px){
+      #game.f1-preparation{height:1480px!important;min-height:1480px!important}
+      #previewPanels{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:1fr 1.1fr 1.55fr!important;bottom:100px!important}
+    }
+    </style>"""
+    script = """<script>
+    // 준비 화면을 벗어나면 기존 레이스 표시 크기로 돌아갑니다.
+    // 패널 표시 상태만 관찰하며 게임 진행에는 개입하지 않습니다.
+    (()=>{const root=document.getElementById('game');const panels=document.getElementById('previewPanels');
+    if(!root||!panels)return;
+    const sync=()=>root.classList.toggle('f1-preparation',!panels.hidden);
+    sync();new MutationObserver(sync).observe(panels,{attributes:true,attributeFilter:['hidden']});})();
+    </script>"""
+    return document.replace('</head>', style + '</head>', 1).replace('</body>', script + '</body>', 1)
+
 def main():
     st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏁",
                        layout="wide", initial_sidebar_state="collapsed")
     apply_page_style()
+
+    # F1_AI_NAVIGATION_V1
+    st.caption("채팅 페이지로 이동하면 현재 레이스는 중단될 수 있습니다. 차량 설정과 같은 세션의 대화는 유지됩니다.")
+    if st.button("AI 레이스 엔지니어와 대화하기", key="f1_ai_navigation_v1", use_container_width=True):
+        try:
+            st.switch_page("pages/chat.py")
+        except Exception:
+            st.warning("채팅 페이지로 이동하지 못했습니다. pages/chat.py 경로와 Streamlit 버전을 확인해 주세요.")
     config, performance = load_my_car()
     # 페이지 이동 버튼은 iframe 바깥에 두어 미니맵과 HUD를 가리지 않습니다.
     garage_col, home_col = st.columns(2)
@@ -131,7 +167,7 @@ def main():
     st.markdown("<div class='head'><div class='logo'>F1 <b>RACING SIMULATOR</b></div>"
                 "<div class='step'>MY 3D F1 CAR · TRACK TEST CIRCUIT</div></div>",
                 unsafe_allow_html=True)
-    components.html(build_simulation_html(car_data), height=560, scrolling=False)
+    components.html(_f1_layout_html(build_simulation_html(car_data)), height=720, scrolling=True)
 
 
 SIMULATION_HTML = r'''<!doctype html><html lang="ko"><head><meta charset="utf-8">
