@@ -496,6 +496,14 @@ def render_performance_panel(performance, previous_performance, differences, cha
 # -----------------------------------------------------------------------------
 # 6. 메인 실행 흐름
 # -----------------------------------------------------------------------------
+def open_ai_engineer():
+    """차량 선택과 대화 상태를 유지한 채 기존 채팅 페이지로 이동합니다."""
+    try:
+        st.switch_page("pages/chat.py")
+    except Exception:
+        st.warning("채팅 페이지로 이동하지 못했습니다. pages/chat.py 경로와 Streamlit 버전을 확인해 주세요.")
+
+
 def main():
     """데이터 준비 → 사용자 입력 → 계산 → 3D 및 UI 렌더링 순서로 앱을 실행합니다."""
     st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏁", layout="wide", initial_sidebar_state="collapsed")
@@ -536,6 +544,9 @@ def main():
             if st.button("레이싱 시뮬레이션", disabled=not ready,
                          help=None if ready else "먼저 차량을 설계해 주세요.", use_container_width=True):
                 st.switch_page("pages/racing.py")
+        # 기존 두 시작 버튼은 유지하고 그 아래에 상담 버튼을 추가합니다.
+        if st.button("AI 레이스 엔지니어와 대화하기", key="home_ai_engineer", use_container_width=True):
+            open_ai_engineer()
         return
     parts = get_part_data()
 
@@ -564,7 +575,7 @@ def main():
     differences = calculate_performance_difference(current_performance, previous_performance)
 
     st.markdown("<div class='garage-head'><div class='logo'>F1 <b>RACING SIMULATOR</b> · GARAGE</div><div class='step'>BUILD 02 · INTERACTIVE 3D SETUP</div></div>", unsafe_allow_html=True)
-    nav_race, nav_home = st.columns(2)
+    nav_race, nav_home, nav_ai = st.columns(3)
     with nav_race:
         if st.button("🏁 레이싱 시뮬레이션 시작", disabled=not (
             isinstance(st.session_state.get("my_car_config"), dict)
@@ -575,6 +586,9 @@ def main():
         if st.button("⌂ 처음 화면으로 돌아가기", use_container_width=True):
             st.session_state.app_view = "home"
             st.rerun()
+    with nav_ai:
+        if st.button("AI 레이스 엔지니어와 대화하기", key="garage_ai_engineer", use_container_width=True):
+            open_ai_engineer()
     render_help_message()
 
     left, center, right = st.columns([0.78, 2.45, 1.05], gap="medium")
