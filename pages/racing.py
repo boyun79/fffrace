@@ -80,29 +80,21 @@ def apply_page_style():
     .head{border-top:3px solid #ff3158;border-bottom:1px solid #2a3542;padding:12px 16px;background:#0c1118;display:flex;justify-content:space-between}.logo{font:700 25px Oxanium}.logo b{color:#ff3158}.step{font:11px Oxanium;color:#8492a0;letter-spacing:2px}
     .card{background:#0d131b;border:1px solid #2a3542;padding:14px}.title{font:700 12px Oxanium;letter-spacing:2px;color:#9aa8b6;border-bottom:1px solid #293542;padding-bottom:9px;margin-bottom:10px}.chips span{display:inline-block;padding:4px 7px;margin:3px;border:1px solid #354353;color:#9eacba;font-size:10px}.bar-row{margin:8px 0}.bar-top{display:flex;justify-content:space-between;font:700 11px Oxanium}.bar{height:9px;background:#232c36;margin-top:5px;transform:skewX(-12deg);overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,#27d6ff,#8065ff)}
     div[data-testid='stButton'] button{width:100%!important;min-height:58px!important;background:#e51d45!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border:1px solid #ff6681!important;font:700 16px Oxanium!important}div[data-testid='stButton'] button *{color:#fff!important;-webkit-text-fill-color:#fff!important}.empty{max-width:650px;margin:90px auto;padding:30px;text-align:center;background:#0e141c;border-top:3px solid #ff3158}
-        /* Streamlit 버전별 버튼 클래스보다 높은 우선순위로 모든 상태의 대비를 고정합니다. */
-    .stApp div[data-testid="stButton"] button,
-    .stApp div[data-testid="stButton"] button[kind],
-    .stApp button[data-testid^="stBaseButton"],
-    .stApp .stButton button {width:100%!important;min-height:44px!important;text-align:left!important;background-color:#10161e!important;background-image:none!important;border:1px solid #354252!important;color:#f4f7fb!important;border-radius:4px!important;font-weight:700!important;opacity:1!important;-webkit-text-fill-color:#f4f7fb!important;box-shadow:none!important}
-    .stApp div[data-testid="stButton"] button *,
-    .stApp button[data-testid^="stBaseButton"] *,
-    .stApp .stButton button * {color:#f4f7fb!important;-webkit-text-fill-color:#f4f7fb!important;opacity:1!important}
-    .stApp div[data-testid="stButton"] button:hover,
-    .stApp button[data-testid^="stBaseButton"]:hover {background-color:#172631!important;border-color:#27d6ff!important;color:#fff!important;-webkit-text-fill-color:#fff!important;box-shadow:inset 3px 0 #27d6ff!important}
-    .stApp div[data-testid="stButton"] button:active,
-    .stApp div[data-testid="stButton"] button:focus,
-    .stApp button[data-testid^="stBaseButton"]:active,
-    .stApp button[data-testid^="stBaseButton"]:focus {background-color:#392033!important;border-color:#ff3158!important;color:#fff!important;-webkit-text-fill-color:#fff!important;box-shadow:inset 4px 0 #ff3158!important}
-    .stApp div[data-testid="stButton"] button:disabled,
-    .stApp button[data-testid^="stBaseButton"]:disabled {background-color:#242c35!important;background-image:none!important;border-color:#46515d!important;color:#c4ced8!important;-webkit-text-fill-color:#c4ced8!important;opacity:1!important}
-    .stApp div[data-testid="stButton"] button:disabled * {color:#c4ced8!important;-webkit-text-fill-color:#c4ced8!important;opacity:1!important}
+    
+/* 설계 화면과 같은 이동 버튼. 긴 문구는 잘리지 않고 줄바꿈합니다. */
+.stApp div[data-testid="stButton"] button {
+ background:#10161e!important;background-image:none!important;color:#f4f7fb!important;
+ -webkit-text-fill-color:#f4f7fb!important;border:1px solid #354252!important;
+ border-radius:4px!important;min-height:44px!important;padding:10px 12px!important;
+ font-family:'Noto Sans KR',sans-serif!important;font-size:14px!important;font-weight:700!important;
+ line-height:1.5!important;white-space:normal!important;height:auto!important;box-sizing:border-box;
+}
+.stApp div[data-testid="stButton"] button * {color:inherit!important;-webkit-text-fill-color:inherit!important;white-space:normal!important;overflow-wrap:anywhere;line-height:1.5!important;font-size:14px!important}
+.stApp div[data-testid="stButton"] button:hover {background:#172631!important;border-color:#27d6ff!important}
+.stApp div[data-testid="stButton"] button:focus-visible {border-color:#ff3158!important;outline:2px solid #ff315866;outline-offset:2px}
+@media(max-width:760px){[data-testid="stHorizontalBlock"]:has([data-testid="stButton"]) {flex-wrap:wrap!important;gap:.5rem!important}
+[data-testid="stHorizontalBlock"]:has([data-testid="stButton"])>[data-testid="stColumn"] {min-width:min(100%,250px)!important;flex:1 1 250px!important}}
 
-/* 화면 이동 버튼의 크기와 문구 줄바꿈을 모든 페이지에서 맞춥니다. */
-.stApp div[data-testid="stButton"] button {font-family:'Noto Sans KR',sans-serif!important;font-size:14px!important;line-height:1.5!important;padding:10px 14px!important;white-space:normal!important;height:auto!important}
-.stApp div[data-testid="stButton"] button p {font-size:14px!important;line-height:1.5!important;margin:0!important;word-break:keep-all;overflow-wrap:anywhere}
-.stApp div[data-testid="stButton"] button:focus-visible {outline:2px solid #ff3158!important;outline-offset:2px}
-@media(max-width:760px){[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] button){flex-wrap:wrap!important;gap:.5rem!important}[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] button)>[data-testid="stColumn"]{flex:1 1 100%!important;width:100%!important;min-width:0!important}}
 </style>""",unsafe_allow_html=True)
 
 
@@ -162,24 +154,24 @@ def main():
                        layout="wide", initial_sidebar_state="collapsed")
     apply_page_style()
 
+    # F1_AI_NAVIGATION_V1
+    st.caption("채팅 페이지로 이동하면 현재 레이스는 중단될 수 있습니다. 차량 설정과 같은 세션의 대화는 유지됩니다.")
+    if st.button("🤖 AI 레이스 엔지니어와 대화하기", key="f1_ai_navigation_v1", use_container_width=True):
+        try:
+            st.switch_page("pages/chat.py")
+        except Exception:
+            st.warning("채팅 페이지로 이동하지 못했습니다. pages/chat.py 경로와 Streamlit 버전을 확인해 주세요.")
     config, performance = load_my_car()
     # 페이지 이동 버튼은 iframe 바깥에 두어 미니맵과 HUD를 가리지 않습니다.
-    garage_col, home_col, ai_col = st.columns(3)
+    garage_col, home_col = st.columns(2)
     with garage_col:
-        if st.button("차량 설계 화면으로 돌아가기", use_container_width=True):
+        if st.button("🔧 차량 설계 화면으로 돌아가기", use_container_width=True):
             st.session_state.app_view = "garage"
             st.switch_page("main.py")
     with home_col:
-        if st.button("처음 화면으로 돌아가기", use_container_width=True):
+        if st.button("🏠 처음 화면으로 돌아가기", use_container_width=True):
             st.session_state.app_view = "home"
             st.switch_page("main.py")
-    with ai_col:
-        if st.button("AI 레이스 엔지니어와 대화하기", key="f1_ai_navigation_v1", use_container_width=True):
-            try:
-                st.switch_page("pages/chat.py")
-            except Exception:
-                st.warning("채팅 페이지로 이동하지 못했습니다. pages/chat.py 경로와 Streamlit 버전을 확인해 주세요.")
-    st.caption("채팅 페이지로 이동하면 현재 레이스는 중단될 수 있습니다. 차량 설정과 같은 세션의 대화는 유지됩니다.")
     if not (config and performance) or not all(
         key in config and config[key] in spec["options"]
         for key, spec in GARAGE_VISUAL_OPTIONS.items()
