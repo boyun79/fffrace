@@ -172,7 +172,30 @@ def apply_game_css():
     .part-role{padding:10px 12px;margin:0 0 11px;background:#0c131b;border-left:3px solid var(--cyan);color:#d3dde6;font-size:12px;line-height:1.55}.part-role b{font:700 15px 'Oxanium';color:#fff}.part-role span{color:#91a0af}
     .preview-shell{border:1px solid #2b3744;background:linear-gradient(135deg,#101821,#080c11);margin-top:10px;box-shadow:0 12px 35px #0006}.preview-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #283441}.preview-title{font:700 12px 'Oxanium';letter-spacing:2px}.preview-current{font:700 12px 'Oxanium';color:#ffbd32}.proscons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.pros,.cons{padding:10px;background:#0c1218;border:1px solid #26313d;font-size:11px;line-height:1.7}.pros b{color:#37eca0}.cons b{color:#ff7387}.change-table{margin:10px 0;border:1px solid #293542;background:#0b1016}.change-row{display:grid;grid-template-columns:1.35fr .8fr .8fr .65fr;padding:7px 9px;border-bottom:1px solid #202a34;font:600 11px 'Oxanium'}.change-row:last-child{border-bottom:0}.result-line{padding:12px;background:linear-gradient(90deg,#17251f,#10161d);border:1px solid #2b5947;color:#d8f7e9;font-size:12px;line-height:1.6}.flow-arrow{text-align:center;color:#27d6ff;font:700 18px 'Oxanium';margin:-3px 0 1px}
     @media(max-width:1000px){.intro{flex-wrap:wrap}.block-container{padding:.6rem}.garage-head{position:static}}
-    </style>""", unsafe_allow_html=True)
+        /* Streamlit 버전별 버튼 클래스보다 높은 우선순위로 모든 상태의 대비를 고정합니다. */
+    .stApp div[data-testid="stButton"] button,
+    .stApp div[data-testid="stButton"] button[kind],
+    .stApp button[data-testid^="stBaseButton"],
+    .stApp .stButton button {width:100%!important;min-height:44px!important;text-align:left!important;background-color:#10161e!important;background-image:none!important;border:1px solid #354252!important;color:#f4f7fb!important;border-radius:4px!important;font-weight:700!important;opacity:1!important;-webkit-text-fill-color:#f4f7fb!important;box-shadow:none!important}
+    .stApp div[data-testid="stButton"] button *,
+    .stApp button[data-testid^="stBaseButton"] *,
+    .stApp .stButton button * {color:#f4f7fb!important;-webkit-text-fill-color:#f4f7fb!important;opacity:1!important}
+    .stApp div[data-testid="stButton"] button:hover,
+    .stApp button[data-testid^="stBaseButton"]:hover {background-color:#172631!important;border-color:#27d6ff!important;color:#fff!important;-webkit-text-fill-color:#fff!important;box-shadow:inset 3px 0 #27d6ff!important}
+    .stApp div[data-testid="stButton"] button:active,
+    .stApp div[data-testid="stButton"] button:focus,
+    .stApp button[data-testid^="stBaseButton"]:active,
+    .stApp button[data-testid^="stBaseButton"]:focus {background-color:#392033!important;border-color:#ff3158!important;color:#fff!important;-webkit-text-fill-color:#fff!important;box-shadow:inset 4px 0 #ff3158!important}
+    .stApp div[data-testid="stButton"] button:disabled,
+    .stApp button[data-testid^="stBaseButton"]:disabled {background-color:#242c35!important;background-image:none!important;border-color:#46515d!important;color:#c4ced8!important;-webkit-text-fill-color:#c4ced8!important;opacity:1!important}
+    .stApp div[data-testid="stButton"] button:disabled * {color:#c4ced8!important;-webkit-text-fill-color:#c4ced8!important;opacity:1!important}
+
+/* 화면 이동 버튼의 크기와 문구 줄바꿈을 모든 페이지에서 맞춥니다. */
+.stApp div[data-testid="stButton"] button {font-family:'Noto Sans KR',sans-serif!important;font-size:14px!important;line-height:1.5!important;padding:10px 14px!important;white-space:normal!important;height:auto!important}
+.stApp div[data-testid="stButton"] button p {font-size:14px!important;line-height:1.5!important;margin:0!important;word-break:keep-all;overflow-wrap:anywhere}
+.stApp div[data-testid="stButton"] button:focus-visible {outline:2px solid #ff3158!important;outline-offset:2px}
+@media(max-width:760px){[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] button){flex-wrap:wrap!important;gap:.5rem!important}[data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] button)>[data-testid="stColumn"]{flex:1 1 100%!important;width:100%!important;min-width:0!important}}
+</style>""", unsafe_allow_html=True)
 
 
 # -----------------------------------------------------------------------------
@@ -541,7 +564,7 @@ def main():
             st.markdown("<div class='home-card home-locked'><h3>🏁 레이싱 시뮬레이션</h3><p>" +
                         ("설계한 차량으로 테스트 서킷을 달려보세요." if ready else "🔒 먼저 차량을 설계해 주세요.") +
                         "</p></div>", unsafe_allow_html=True)
-            if st.button("레이싱 시뮬레이션", disabled=not ready,
+            if st.button("레이싱 시뮬레이션 시작", disabled=not ready,
                          help=None if ready else "먼저 차량을 설계해 주세요.", use_container_width=True):
                 st.switch_page("pages/racing.py")
         # 기존 두 시작 버튼은 유지하고 그 아래에 상담 버튼을 추가합니다.
@@ -577,13 +600,13 @@ def main():
     st.markdown("<div class='garage-head'><div class='logo'>F1 <b>RACING SIMULATOR</b> · GARAGE</div><div class='step'>BUILD 02 · INTERACTIVE 3D SETUP</div></div>", unsafe_allow_html=True)
     nav_race, nav_home, nav_ai = st.columns(3)
     with nav_race:
-        if st.button("🏁 레이싱 시뮬레이션 시작", disabled=not (
+        if st.button("레이싱 시뮬레이션 시작", disabled=not (
             isinstance(st.session_state.get("my_car_config"), dict)
             and isinstance(st.session_state.get("my_car_performance"), dict)
         ), use_container_width=True):
             st.switch_page("pages/racing.py")
     with nav_home:
-        if st.button("⌂ 처음 화면으로 돌아가기", use_container_width=True):
+        if st.button("처음 화면으로 돌아가기", use_container_width=True):
             st.session_state.app_view = "home"
             st.rerun()
     with nav_ai:
