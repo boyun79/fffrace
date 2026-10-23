@@ -194,7 +194,7 @@ def generate_opponents(parts, calculator, player_config, previous=None):
 
 
 def opponent_preparation(player_config):
-    """初回と明示的な変更時だけ生成。確認や再実行では保存値を読みます。"""
+    """최초에만 생성하고 확인 화면 전환은 저장된 조합을 그대로 사용합니다."""
     try:
         parts, calculator = garage_rules()
         if OPPONENT_KEY not in st.session_state:
@@ -202,31 +202,70 @@ def opponent_preparation(player_config):
     except Exception:
         st.error("상대 차량의 부품 정보를 읽지 못했습니다. main.py 위치를 확인해 주세요.")
         st.stop()
-    preparing = st.checkbox("🔧 상대 차량 준비·설정 모드", value=True, key="f1_opponent_preparation_mode")
-    st.caption("설정 모드를 끄면 시뮬레이션이 표시됩니다. 주행 중 다시 켜면 현재 경주를 종료하고 준비로 돌아갑니다. 저장된 상대 조합은 바뀌지 않습니다.")
-    view_col, change_col = st.columns(2)
-    with view_col:
-        if st.button("🔎 상대 차량 확인", disabled=not preparing, use_container_width=True):
-            st.session_state["f1_opponent_show_v1"] = not st.session_state.get("f1_opponent_show_v1", False)
+    detail_key = "f1_opponent_detail_view_v2"
+    details = st.session_state.get(detail_key, False)
+    # 기존 경주 iframe 내부의 실행 상태를 Python에서 추측하지 않습니다.
+    # 외부 버튼은 경주 종료 후 준비 화면에서만 사용하도록 명확하게 안내합니다.
+    st.caption("상대 확인·변경은 경주 시작 전이나 종료 후에 사용해 주세요. 주행 중 누르면 현재 경주는 초기화되며, 변경한 조합은 새 경주에 적용됩니다.")
+    back_col, change_col = st.columns(2)
+    with back_col:
+        if st.button("🏁 레이싱 준비 화면으로 돌아가기" if details else "🔎 상대 차량 확인",
+                     key="f1_opponent_view_toggle_v2", use_container_width=True):
+            st.session_state[detail_key] = not details
+            st.rerun()
     with change_col:
-        if st.button("🔄 상대 차량 바꾸기", disabled=not preparing, use_container_width=True):
+        if st.button("🔄 상대 차량 바꾸기", key="f1_opponent_change_v2", use_container_width=True):
             try:
-                st.session_state[OPPONENT_KEY] = generate_opponents(parts, calculator, player_config, st.session_state[OPPONENT_KEY])
-                st.success("모든 상대 차량 조합을 변경했습니다. 다음 경주부터 적용됩니다.")
+                st.session_state[OPPONENT_KEY] = generate_opponents(
+                    parts, calculator, player_config, st.session_state[OPPONENT_KEY])
+                st.success("모든 상대 차량 조합을 변경했습니다. 새 경주부터 적용됩니다.")
             except RuntimeError:
                 st.warning("상대 차량을 변경하지 못했습니다. 기존 조합을 유지합니다.")
     roster = st.session_state[OPPONENT_KEY]
-    if preparing and st.session_state.get("f1_opponent_show_v1", False):
-        for car in roster:
-            with st.expander(car["id"] + " · 부품 구성과 성능", expanded=True):
-                rows = [{"부품": parts[k]["ko"], "설정": parts[k]["options"][v]["label"], "설정값": v}
-                        for k, v in car["config"].items()]
-                st.dataframe(rows, hide_index=True, use_container_width=True)
+    if details:
+        st.markdown("### AI 상대 차량")
+        st.caption("현재 저장된 조합입니다. 성능은 게임 점수이며 실제 속도 단위가 아닙니다.")
+        # 마커를 포함한 카드 컨테이너에만 펼침 컴포넌트 스타일을 적용합니다.
+        st.markdown("""<style>
+        [data-testid="stVerticalBlockBorderWrapper"]:has(.f1-opponent-card),
+        [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .f1-opponent-card){color:#edf3fa}
+        [data-testid="stExpander"]:has(.f1-opponent-part-details){background:#101b29!important;border:1px solid #354252!important;border-radius:6px!important}
+        [data-testid="stExpander"]:has(.f1-opponent-part-details) details,
+        [data-testid="stExpander"]:has(.f1-opponent-part-details) summary,
+        [data-testid="stExpander"]:has(.f1-opponent-part-details) [data-testid="stExpanderDetails"]{
+          background:#101b29!important;color:#edf3fa!important}
+        [data-testid="stExpander"]:has(.f1-opponent-part-details) summary:hover{background:#192a3b!important}
+        [data-testid="stExpander"]:has(.f1-opponent-part-details) summary:focus-visible{outline:2px solid #ff3158!important;outline-offset:-2px}
+        [data-testid="stExpander"]:has(.f1-opponent-part-details) summary *,
+        [data-testid="stExpander"]:has(.f1-opponent-part-details) p{color:#edf3fa!important;-webkit-text-fill-color:#edf3fa!important}
+        .f1-opponent-card{background:#101923;border:1px solid #354252;border-top:3px solid #ff3158;border-radius:8px;padding:16px;margin-bottom:8px;color:#edf3fa}
+        .f1-opponent-card h3{margin:0 0 8px;color:#fff;font-size:20px}
+        .f1-opponent-card .summary{font-size:12px;line-height:1.7;color:#bfcede;margin-bottom:12px}
+        .f1-opponent-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px}
+        .f1-opponent-value{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+        .f1-opponent-bar{height:6px;background:#283442;border-radius:4px;overflow:hidden}
+        .f1-opponent-bar i{display:block;height:100%;background:linear-gradient(90deg,#27d6ff,#8065ff)}
+        .f1-opponent-part-details{color:#dce6f3;font-size:13px;line-height:1.7}
+        .f1-opponent-part-details .part-row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #293747}
+        </style>""", unsafe_allow_html=True)
+        columns = st.columns(2)
+        for index, car in enumerate(roster):
+            with columns[index % 2]:
+                summary = " · ".join(html.escape(parts[k]["ko"] + " " + parts[k]["options"][car["config"][k]]["label"])
+                                     for k in ("front_wing", "tyres", "engine") if k in car["config"])
+                metrics = ""
                 for metric in METRICS:
                     value = car["performance"][metric]
-                    st.caption(f"{metric}: {value} / 100")
-                    st.progress(max(0, min(100, int(value))))
-    return roster, preparing
+                    width = max(0, min(100, float(value)))
+                    label = "접지력" if metric == "그립" else metric
+                    metrics += (f'<div><div class="f1-opponent-value"><span>{html.escape(label)}</span>'
+                                f'<b>{html.escape(str(value))}</b></div><div class="f1-opponent-bar"><i style="width:{width}%"></i></div></div>')
+                st.markdown(f'<section class="f1-opponent-card"><h3>{html.escape(car["id"])}</h3><div class="summary">{summary}</div><div class="f1-opponent-metrics">{metrics}</div></section>', unsafe_allow_html=True)
+                # 마커가 접힌 상태에서도 DOM에 있도록 실행 결과로 포함합니다.
+                with st.expander(car["id"] + " · 부품별 세부 설정", expanded=False):
+                    rows = "".join(f'<div class="part-row"><span>{html.escape(parts[k]["ko"])}</span><span>{html.escape(parts[k]["options"][v]["label"])} ({html.escape(v)})</span></div>' for k, v in car["config"].items())
+                    st.markdown('<div class="f1-opponent-part-details">' + rows + '</div>', unsafe_allow_html=True)
+    return roster, details
 
 
 def main():
@@ -258,9 +297,8 @@ def main():
     ):
         st.warning("먼저 차량을 설계해 주세요.")
         return
-    opponents, preparing = opponent_preparation(config)
-    if preparing:
-        st.info("상대 차량을 확인하거나 변경한 뒤 위 설정 모드를 끄면 기존 경주 시작 화면이 표시됩니다.")
+    opponents, showing_details = opponent_preparation(config)
+    if showing_details:
         return
     car_data = prepare_car_data(config, performance)
     st.markdown("<div class='head'><div class='logo'>F1 <b>RACING SIMULATOR</b></div>"
