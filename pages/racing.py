@@ -110,7 +110,7 @@ CIRCUITS = {'monaco': {'name': 'Monaco Circuit', 'width': 10, 'points': [[-170, 
 
 def build_simulation_html(car_data, opponents):
     """준비 화면부터 결과까지 하나의 iframe에서 실행하여 rerun에 따른 중단을 방지합니다."""
-    data = {"circuit": CIRCUITS[st.session_state.get("f1_active_circuit", "monaco")], "car": car_data, "laps": TOTAL_LAPS, "opponents": [dict(prepare_car_data(c["config"], c["performance"]), id=c["id"]) for c in opponents]}
+    data = {"circuit": CIRCUITS[st.session_state.get("f1_active_circuit", "monaco")], "car": car_data, "laps": TOTAL_LAPS, "circuitKey": st.session_state.get("f1_active_circuit", "monaco"), "opponents": [dict(prepare_car_data(c["config"], c["performance"]), id=c["id"]) for c in opponents]}
     # </script> 삽입을 막고 기존 Garage 값의 JSON 구조는 그대로 유지합니다.
     payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
     # Garage의 .perf 카드 구조를 재사용합니다. 변화량은 저장되지 않으므로 표시하지 않습니다.
@@ -272,25 +272,18 @@ def opponent_preparation(player_config):
     return roster, details
 
 
-@st.fragment
-def circuit_controls():
-    """선택은 이 영역만 갱신하여 실행 중인 iframe 경주를 중단하지 않습니다."""
-    st.markdown("### 트랙 선택")
+def render_racing_component(document):
+    """준비 화면의 서킷 선택만 Python 세션으로 전달합니다."""
+    import tempfile
+    import uuid
+    folder = st.session_state.setdefault("f1_component_folder", tempfile.mkdtemp(prefix="f1_circuit_"))
+    token = st.session_state.setdefault("f1_component_token", uuid.uuid4().hex)
+    Path(folder, "index.html").write_text(document, encoding="utf-8")
+    component = components.declare_component("f1_circuit_racing", path=folder)
     current = st.session_state.get("f1_active_circuit", "monaco")
-    pending = st.session_state.get("f1_pending_circuit", current)
-    cols = st.columns(3)
-    for col, (key, spec) in zip(cols, CIRCUITS.items()):
-        with col:
-            if st.button("🏁 " + spec["name"], key="circuit_" + key,
-                         use_container_width=True, type="primary" if pending == key else "secondary"):
-                st.session_state["f1_pending_circuit"] = key
-                st.rerun(scope="fragment")
-    pending = st.session_state.get("f1_pending_circuit", current)
-    st.caption("현재: " + CIRCUITS[current]["name"] + " · 선택: " + CIRCUITS[pending]["name"])
-    st.caption(CIRCUITS[pending]["description"] + " · 공식 좌표가 아닌 게임용 레이아웃")
-    st.info("선택만 하면 진행 중인 경주는 유지됩니다. 경주 종료 후 아래 버튼으로 선택한 서킷의 준비 화면을 여세요. 적용하면 현재 경주는 종료됩니다.")
-    if st.button("🏁 선택한 서킷의 레이싱 준비 화면 열기", key="apply_circuit", use_container_width=True):
-        st.session_state["f1_active_circuit"] = pending
+    selected = component(key="f1_racing_" + token + "_" + current, default=None)
+    if isinstance(selected, str) and selected in CIRCUITS and selected != current:
+        st.session_state["f1_active_circuit"] = selected
         st.rerun()
 
 
@@ -299,16 +292,14 @@ def main():
                        layout="wide", initial_sidebar_state="collapsed")
     apply_page_style()
 
-    # F1_AI_NAVIGATION_V1
-    st.caption("채팅 페이지로 이동하면 현재 레이스는 중단될 수 있습니다. 차량 설정과 같은 세션의 대화는 유지됩니다.")
-    if st.button("🤖 AI 레이스 엔지니어와 대화하기", key="f1_ai_navigation_v1", use_container_width=True):
-        try:
-            st.switch_page("pages/chat.py")
-        except Exception:
-            st.warning("채팅 페이지로 이동하지 못했습니다. pages/chat.py 경로와 Streamlit 버전을 확인해 주세요.")
-    config, performance = load_my_car()
-    # 페이지 이동 버튼은 iframe 바깥에 두어 미니맵과 HUD를 가리지 않습니다.
-    garage_col, home_col = st.columns(2)
+    st.markdown("""<style>
+    @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@600;700&display=swap');
+    .f1-race-head{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:3px solid #ff3158;border-bottom:1px solid #27313d;padding:10px 16px;background:#0c1118;margin-bottom:10px}
+    .f1-race-head .logo{font:700 25px Oxanium,sans-serif;letter-spacing:2px;color:#eef3f8}.f1-race-head b{color:#ff3158}.f1-race-head .step{font:600 11px Oxanium,sans-serif;color:#8794a3;letter-spacing:2px}
+    div[data-testid="stButton"] button{min-height:44px!important;border:1px solid #354252!important;border-radius:4px!important;background:#10161e!important;color:#f4f7fb!important;font-size:14px!important;padding:8px 12px!important;white-space:normal!important}
+    @media(max-width:650px){.f1-race-head{flex-wrap:wrap}.f1-race-head .logo{font-size:20px}}
+    </style><div class="f1-race-head"><div class="logo">F1 <b>RACING SIMULATOR</b></div><div class="step">RACE SIMULATION</div></div>""", unsafe_allow_html=True)
+    garage_col, home_col, ai_col = st.columns(3)
     with garage_col:
         if st.button("🔧 차량 설계 화면으로 돌아가기", use_container_width=True):
             st.session_state.app_view = "garage"
@@ -317,6 +308,10 @@ def main():
         if st.button("🏠 처음 화면으로 돌아가기", use_container_width=True):
             st.session_state.app_view = "home"
             st.switch_page("main.py")
+    with ai_col:
+        if st.button("🤖 AI 레이스 엔지니어와 대화하기", use_container_width=True):
+            st.switch_page("pages/chat.py")
+    config, performance = load_my_car()
     if not (config and performance) or not all(
         key in config and config[key] in spec["options"]
         for key, spec in GARAGE_VISUAL_OPTIONS.items()
@@ -328,11 +323,8 @@ def main():
         return
     st.session_state.setdefault("f1_active_circuit", "monaco")
     car_data = prepare_car_data(config, performance)
-    st.markdown("<div class='head'><div class='logo'>F1 <b>RACING SIMULATOR</b></div>"
-                "<div class='step'>MY 3D F1 CAR · TRACK TEST CIRCUIT</div></div>",
-                unsafe_allow_html=True)
-    components.html(_f1_layout_html(build_simulation_html(car_data, opponents)), height=720, scrolling=True)
-    circuit_controls()
+    render_racing_component(_f1_layout_html(build_simulation_html(car_data, opponents)))
+
 
 
 SIMULATION_HTML = r'''<!doctype html><html lang="ko"><head><meta charset="utf-8">
@@ -358,12 +350,31 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 #back{pointer-events:auto;position:absolute;right:115px;bottom:14px;cursor:pointer;background:#091725;color:#fff;border:1px solid #27d6ff;padding:8px 11px;font-weight:bold}
 #result{display:none;width:min(490px,calc(100vw - 32px));max-height:calc(100% - 64px);overflow:auto;background:#09131eef;border:1px solid #ff3158;border-top:3px solid #ff3158;padding:18px;color:#eff5fa;text-shadow:none;text-align:left;box-shadow:0 12px 40px #000a}#result .result-title{text-align:center;font:700 24px Oxanium,Arial,sans-serif;color:#fff;margin:0 0 4px}#result .result-sub{text-align:center;font:700 11px Oxanium,Arial,sans-serif;letter-spacing:2px;color:#ff6681;margin-bottom:14px}#result .result-rank{padding:13px;background:#171e2a;border:1px solid #ff3158;text-align:center;margin-bottom:10px}#result .result-rank span{display:block;color:#b9cbd5;font-size:12px}#result .result-rank strong{font:700 38px Oxanium,Arial,sans-serif;color:#ff4569}#result .result-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}#result .result-card{min-width:0;padding:11px;background:#101b26;border:1px solid #324453}#result .result-card span{display:block;color:#afbdca;font-size:11px;margin-bottom:4px}#result .result-card b{font:700 clamp(15px,3vw,22px) Oxanium,Arial,sans-serif;white-space:nowrap}@media(max-width:410px){#result .result-grid{grid-template-columns:1fr}}
 #error{position:absolute;left:12px;bottom:10px;color:#ff7186;background:#08111e}
+#circuitControls{pointer-events:auto;flex:none;padding:10px;display:grid;gap:6px;background:#0c1118;border-top:1px solid #354252}
+#circuitControls strong{font-size:12px;color:#aebbc9;text-align:left}
+#circuitControls button{cursor:pointer;min-height:36px;padding:7px 9px;border:1px solid #354252;border-radius:4px;background:#10161e;color:#f4f7fb;font-size:12px;text-align:left;white-space:normal}
+#circuitControls button:hover{border-color:#ff6681}#circuitControls button.active{background:#271622;border-color:#ff3158}#circuitControls button:focus-visible{outline:2px solid #ff6681}
 </style><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.164.1/build/three.module.js"}}</script>
-</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><button id="pause" hidden>⏸ PAUSE</button><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
+</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><button id="pause" hidden>⏸ PAUSE</button><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
 <div id="overlay"><p id="message"></p><h1 id="count"></h1><button id="start">SIMULATION START</button><div id="result"></div></div><div id="error"></div></div>
 <script type="module">
 import * as THREE from 'three';
 const DATA=__DATA__,root=document.getElementById('game');
+function streamlitMessage(type,extra={}){window.parent.postMessage({isStreamlitMessage:true,type,...extra},'*')}
+function syncFrameHeight(){streamlitMessage('streamlit:setFrameHeight',{height:Math.ceil(document.documentElement.scrollHeight)})}
+window.addEventListener('message',e=>{if(e.source===window.parent&&e.data?.type==='streamlit:render')syncFrameHeight()});
+streamlitMessage('streamlit:componentReady',{apiVersion:1});
+new ResizeObserver(syncFrameHeight).observe(root);
+document.querySelectorAll('[data-circuit]').forEach(button=>{
+  button.classList.toggle('active',button.dataset.circuit===DATA.circuitKey);
+  button.setAttribute('aria-pressed',String(button.dataset.circuit===DATA.circuitKey));
+  button.addEventListener('click',()=>{
+    // 준비 패널은 주행 중 숨겨지므로 진행 중 경로 변경은 허용하지 않습니다.
+    if(phase!=='preview'||button.dataset.circuit===DATA.circuitKey)return;
+    streamlitMessage('streamlit:setComponentValue',{value:button.dataset.circuit,dataType:'json'});
+  });
+});
+
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x08121a);
 const camera=new THREE.PerspectiveCamera(52,1,.1,5000);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
