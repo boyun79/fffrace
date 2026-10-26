@@ -382,8 +382,16 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 #circuitControls strong{font-size:12px;color:#aebbc9;text-align:left}
 #circuitControls button{cursor:pointer;min-height:36px;padding:7px 9px;border:1px solid #354252;border-radius:4px;background:#10161e;color:#f4f7fb;font-size:12px;text-align:left;white-space:normal}
 #circuitControls button:hover{border-color:#ff6681}#circuitControls button.active{background:#271622;border-color:#ff3158}#circuitControls button:focus-visible{outline:2px solid #ff6681}
+
+/* 성능 패널만 마우스 입력을 받도록 하여 실제 내부 스크롤을 복구합니다. */
+#previewPanels #performancePanel{pointer-events:auto!important;overflow-y:auto!important;overflow-x:hidden!important;min-height:0!important;max-height:100%!important;overscroll-behavior:contain;touch-action:pan-y;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
+#performancePanel .previewTitle{position:sticky;top:0;z-index:1;background:#101b27}
+#raceActions{position:absolute;right:12px;bottom:14px;display:flex;gap:8px;pointer-events:auto;max-width:calc(100% - 24px);flex-wrap:wrap;justify-content:flex-end}
+#raceActions #pause,#raceActions #instantResult{position:static;cursor:pointer;background:#091725;color:#fff;border:1px solid #27d6ff;padding:8px 11px;font-weight:bold;min-height:34px;white-space:normal}
+#raceActions #instantResult:hover{border-color:#ff3158;background:#221a29}
+#game:has(#raceActions:not([hidden])) #back{bottom:62px;right:12px}
 </style><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.164.1/build/three.module.js"}}</script>
-</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><button id="pause" hidden>⏸ PAUSE</button><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
+</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><div id="raceActions" hidden><button id="pause" hidden>⏸ PAUSE</button><button id="instantResult">⏭️ 결과 바로 보기</button></div><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
 <div id="overlay"><p id="message"></p><h1 id="count"></h1><button id="start">SIMULATION START</button><div id="result"></div></div><div id="error"></div></div>
 <script type="module">
 import * as THREE from 'three';
@@ -578,13 +586,27 @@ function startCountdown(){if(phase!=='preview')return;
     Object.assign(car,{laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity});initializePhysics(car);placeCar(car,i);
   });
   raceMap.hidden=false;updateMinimap();phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-27).add(new THREE.Vector3(0,19,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
-function startSimulation(now){document.getElementById('back').hidden=false;phase='running';physicsAccumulator=0;elapsed=0;startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
-function finishSimulation(){phase='complete';raceMap.hidden=true;document.getElementById('back').hidden=false;document.getElementById('overlay').style.display='flex';document.getElementById('result').style.display='block';document.getElementById('result').innerHTML='<div class="result-title">레이스 결과</div><div class="result-sub">RACE COMPLETED</div><div class="result-rank"><span>최종 순위</span><strong>'+rank()+' / 5</strong></div><div class="result-grid"><div class="result-card"><span>완주 랩 수</span><b>3</b></div><div class="result-card"><span>최고속도</span><b>'+Math.round(player.top)+' km/h</b></div><div class="result-card"><span>랩타임</span><b>'+player.lastLap.toFixed(2)+' sec</b></div><div class="result-card"><span>최고 랩타임</span><b>'+player.best.toFixed(2)+' sec</b></div></div>';document.getElementById('hud').hidden=true;document.getElementById('pause').hidden=true}
+function startSimulation(now){document.getElementById('back').hidden=false;phase='running';physicsAccumulator=0;elapsed=0;startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('raceActions').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
+function finishSimulation(interrupted=false){
+  if(phase!=='running')return;
+  // 완주 여부나 기록을 수정하지 않고 현재 순위와 실제 기록만 표시합니다.
+  phase='complete';physicsAccumulator=0;isPaused=false;
+  const lapText=v=>Number.isFinite(v)&&v>0?v.toFixed(2)+' sec':'기록 없음';
+  const completed=Math.max(0,Math.min(DATA.laps,player.laps));
+  raceMap.hidden=true;document.getElementById('back').hidden=false;
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('result').style.display='block';
+  document.getElementById('result').innerHTML='<div class="result-title">레이스 결과</div><div class="result-sub">'+(interrupted?'중도 종료':'RACE COMPLETED')+'</div><div class="result-rank"><span>'+(interrupted?'종료 시점 순위':'최종 순위')+'</span><strong>'+rank()+' / '+cars.length+'</strong></div><div class="result-grid"><div class="result-card"><span>완주 랩 수</span><b>'+completed+'</b></div><div class="result-card"><span>최고속도</span><b>'+Math.round(Number.isFinite(player.top)?player.top:0)+' km/h</b></div><div class="result-card"><span>랩타임</span><b>'+lapText(player.lastLap)+'</b></div><div class="result-card"><span>최고 랩타임</span><b>'+lapText(player.best)+'</b></div></div>';
+  document.getElementById('hud').hidden=true;
+  document.getElementById('pause').hidden=true;
+  document.getElementById('raceActions').hidden=true;
+}
+document.getElementById('instantResult').addEventListener('click',()=>finishSimulation(true));
 function resetSimulation(){
   ais.forEach(car=>scene.remove(car.mesh));ais.length=0;cars=[player];
   Object.assign(player,{progress:0,laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity});
   placeCar(player,0);physicsAccumulator=0;elapsed=0;countEnd=0;isPaused=false;phase='preview';
-  document.getElementById('pause').textContent='⏸ PAUSE';document.getElementById('pause').hidden=true;
+  document.getElementById('pause').textContent='⏸ PAUSE';document.getElementById('pause').hidden=true;document.getElementById('raceActions').hidden=true;
   document.getElementById('back').hidden=true;document.getElementById('hud').hidden=true;
   document.getElementById('previewPanels').hidden=false;raceMap.hidden=true;mapMarkers.forEach(dot=>dot.remove());mapMarkers.length=0;document.getElementById('start').hidden=false;
   document.getElementById('overlay').style.display='flex';document.getElementById('overlay').style.justifyContent='flex-end';document.getElementById('message').textContent='';
