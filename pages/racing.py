@@ -110,7 +110,7 @@ CIRCUITS = {'monaco': {'name': 'Monaco Circuit', 'width': 10, 'points': [[-170, 
 
 def build_simulation_html(car_data, opponents):
     """준비 화면부터 결과까지 하나의 iframe에서 실행하여 rerun에 따른 중단을 방지합니다."""
-    data = {"circuit": CIRCUITS[st.session_state.get("f1_active_circuit", "monaco")], "car": car_data, "laps": TOTAL_LAPS, "circuitKey": st.session_state.get("f1_active_circuit", "monaco"), "opponents": [dict(prepare_car_data(c["config"], c["performance"]), id=c["id"]) for c in opponents]}
+    data = {"circuit": CIRCUITS[st.session_state.get("f1_active_circuit", "monaco")], "car": car_data, "laps": TOTAL_LAPS, "circuits": CIRCUITS, "circuitKey": st.session_state.get("f1_active_circuit", "monaco"), "opponents": [dict(prepare_car_data(c["config"], c["performance"]), id=c["id"]) for c in opponents]}
     # </script> 삽입을 막고 기존 Garage 값의 JSON 구조는 그대로 유지합니다.
     payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
     # Garage의 .perf 카드 구조를 재사용합니다. 변화량은 저장되지 않으므로 표시하지 않습니다.
@@ -309,10 +309,9 @@ def render_racing_component(document):
         st.exception(error)
         return
     current = st.session_state.get("f1_active_circuit", "monaco")
-    selected = component(key="f1_racing_" + token + "_" + current, default=None)
+    selected = component(key="f1_racing_" + token, default=None)
     if isinstance(selected, str) and selected in CIRCUITS and selected != current:
         st.session_state["f1_active_circuit"] = selected
-        st.rerun()
 
 
 def main():
@@ -407,6 +406,7 @@ document.querySelectorAll('[data-circuit]').forEach(button=>{
   button.addEventListener('click',()=>{
     // 준비 패널은 주행 중 숨겨지므로 진행 중 경로 변경은 허용하지 않습니다.
     if(phase!=='preview'||button.dataset.circuit===DATA.circuitKey)return;
+    changeCircuit(button.dataset.circuit);
     streamlitMessage('streamlit:setComponentValue',{value:button.dataset.circuit,dataType:'json'});
   });
 });
@@ -422,11 +422,11 @@ ground.rotation.x=-Math.PI/2;ground.position.y=-.08;ground.receiveShadow=true;sc
 __CAR_BUILDER__
 // 하나의 폐쇄형 중심선이 미리보기·노면·주행 모두에 사용됩니다.
 function createWaypoints(){return DATA.circuit.points.map(([x,z])=>new THREE.Vector3(x,0,z))}
-const trackWaypoints=createWaypoints();
+let trackWaypoints=createWaypoints();
 // 점 간격 차이에 따른 과도한 튀어나옴을 줄이는 공통 중심선입니다.
-const curve=new THREE.CatmullRomCurve3(trackWaypoints,true,'centripetal');
+let curve=new THREE.CatmullRomCurve3(trackWaypoints,true,'centripetal');
 curve.arcLengthDivisions=4096;curve.updateArcLengths();
-const roadWidth=DATA.circuit.width, length=curve.getLength();
+let roadWidth=Math.max(18,DATA.circuit.width), length=curve.getLength();
 document.querySelector('#trackPanel .previewTitle').textContent=DATA.circuit.name;
 function frameAt(t){const p=curve.getPointAt((t+1)%1),v=curve.getTangentAt((t+1)%1).normalize();return {p,v,side:new THREE.Vector3(v.z,0,-v.x)}}
 function createTrack(){
@@ -447,18 +447,22 @@ function createTrack(){
 }
 createTrack();
 // 준비 화면의 두 뷰는 동일한 트랙 객체와 동일한 Garage 차량 객체를 번갈아 렌더링합니다.
-const trackObjects=scene.children.filter(obj=>!obj.isLight && obj!==ground);
+let trackObjects=scene.children.filter(obj=>!obj.isLight && obj!==ground);
 // 주행에 사용하는 동일한 curve를 위에서 본 2D SVG 중심선으로 투영합니다.
 const svg=document.getElementById('trackSvg');
+let xy;
+function rebuildMap(){
 const points=Array.from({length:201},(_,i)=>curve.getPointAt(i/200));
 const xs=points.map(p=>p.x),zs=points.map(p=>p.z);
 const minX=Math.min(...xs),maxX=Math.max(...xs),minZ=Math.min(...zs),maxZ=Math.max(...zs);
 const scale=Math.min(264/(maxX-minX),310/(maxZ-minZ));
-const xy=p=>[160+(p.x-(minX+maxX)/2)*scale,195+(p.z-(minZ+maxZ)/2)*scale];
+xy=p=>[160+(p.x-(minX+maxX)/2)*scale,195+(p.z-(minZ+maxZ)/2)*scale];
 const path=points.map((p,i)=>`${i?'L':'M'}${xy(p)[0].toFixed(1)} ${xy(p)[1].toFixed(1)}`).join(' ')+' Z';
 const start=frameAt(0),[sx,sy]=xy(start.p),[ex,ey]=xy(start.p.clone().addScaledVector(start.side,roadWidth/2));
 const dx=ex-sx,dy=ey-sy;
 svg.innerHTML=`<path d="${path}" fill="none" stroke="#586778" stroke-width="${(roadWidth*scale+4).toFixed(1)}" stroke-linejoin="round"/><path d="${path}" fill="none" stroke="#303740" stroke-width="${(roadWidth*scale).toFixed(1)}" stroke-linejoin="round"/><path d="${path}" fill="none" stroke="#abb5c0" stroke-width="1" stroke-dasharray="5 8"/><line x1="${sx-dx}" y1="${sy-dy}" x2="${sx+dx}" y2="${sy+dy}" stroke="white" stroke-width="5" stroke-dasharray="4 3"/>`;
+}
+rebuildMap();
 // 준비 화면 전용 Orbit 스타일 드래그/휠. 주행 카메라 함수는 변경하지 않습니다.
 const carPanel=document.getElementById('carPanel');
 let orbitYaw=.65,orbitPitch=.34,orbitRadius=16,dragPointer=null,lastX=0,lastY=0;
@@ -490,7 +494,7 @@ function updateMinimap(){
 }
 
 // 차량은 출발선 근처 5열 그리드에 놓되, 선수차는 정확히 출발선 위에 둡니다.
-function placeCar(car,index){const f=frameAt(car.progress),offset=index===0?0:(index%2? -2.2:2.2);car.mesh.position.copy(f.p).addScaledVector(f.side,offset);car.mesh.position.y=1.20;car.mesh.rotation.y=Math.atan2(-f.v.x,-f.v.z)+Math.PI}
+function placeCar(car,index){const f=frameAt(car.progress),offset=car.lateral||0;car.mesh.position.copy(f.p).addScaledVector(f.side,offset);car.mesh.position.y=1.20;car.mesh.rotation.y=Math.atan2(-f.v.x,-f.v.z)+Math.PI}
 cars.forEach((car,i)=>{car.progress=i===0?0:1-i*.009;placeCar(car,i)});
 // 게임 점수를 주행 단위로 변환하는 공통 아케이드 모델입니다.
 // 실제 F1 제원이나 실측값이 아니며, 플레이어와 AI에 동일하게 적용합니다.
@@ -529,7 +533,7 @@ function trackCurvatures(){
     return Math.max(0,Math.min(2,a.angleTo(b)/(2*ds)));
   });
 }
-const trackK=trackCurvatures();
+let trackK=trackCurvatures();
 function makeSpeedProfile(m){
   const ds=length/PROFILE_SIZE;
   const speeds=trackK.map(k=>cornerLimit(m,k));
@@ -552,7 +556,8 @@ function updateCar(car,dt,endTime,index){
   if(v>target)next=Math.max(target,v-brakeCapacity(m,v)*dt);
   else next=Math.min(target,Math.max(0,v+acceleration(m,v,trackK[i])*dt));
   next=Math.max(0,Math.min(m.maxSpeed,Number.isFinite(next)?next:0));
-  const distance=(v+next)*.5*dt,remaining=(1-car.progress)*length;
+  if(Number.isFinite(car.trafficCap))next=Math.min(next,Math.max(0,car.trafficCap));
+  const distance=Math.min((v+next)*.5*dt,Number.isFinite(car.trafficCap)?car.trafficCap*dt:Infinity),remaining=(1-car.progress)*length;
   car.speed=next*3.6;car.top=Math.max(car.top,car.speed);
   car.progress+=distance/length;
   if(car.progress>=1){
@@ -564,6 +569,51 @@ function updateCar(car,dt,endTime,index){
   }
 
 }
+
+
+function changeCircuit(key){
+  if(phase!=='preview'||!DATA.circuits[key])return;
+  DATA.circuitKey=key;DATA.circuit=DATA.circuits[key];
+  trackObjects.forEach(obj=>{scene.remove(obj);obj.traverse(o=>{o.geometry?.dispose();if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.dispose())}})});
+  trackWaypoints=createWaypoints();curve=new THREE.CatmullRomCurve3(trackWaypoints,true,'centripetal');
+  curve.arcLengthDivisions=4096;curve.updateArcLengths();length=curve.getLength();roadWidth=Math.max(18,DATA.circuit.width);
+  const previous=new Set(scene.children);createTrack();trackObjects=scene.children.filter(o=>!previous.has(o));
+  rebuildMap();mapSvg.innerHTML=svg.innerHTML;mapMarkers.length=0;trackK=trackCurvatures();
+  player.progress=0;player.model=null;player.speedProfile=null;placeCar(player,0);
+  document.querySelector('#trackPanel .previewTitle').textContent=DATA.circuit.name;
+  document.querySelectorAll('[data-circuit]').forEach(b=>{const active=b.dataset.circuit===key;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
+}
+// 차체 약 9m × 4.5m의 트랙 좌표상 점유영역. 곡선에서는 방향 차이를 여유 폭에 반영합니다.
+function trafficStep(dt){
+ const active=cars.filter(c=>!c.finished),snap=active.map(c=>({c,s:(c.laps+c.progress)*length,v:c.speed/3.6,l:c.lateral||0}));
+ for(const q of snap){
+  const c=q.c,m=c.model;c.trafficCap=Infinity;
+  const wrap=((c.progress%1)+1)%1,k=trackK[Math.floor(wrap*PROFILE_SIZE)%PROFILE_SIZE];
+  const halfWidth=2.4+Math.min(1.1,k*18),laneLimit=Math.max(0,roadWidth/2-halfWidth-.6);
+  const gapTo=r=>{let d=r.s-q.s;while(d<-length/2)d+=length;while(d>length/2)d-=length;return d};
+  const free=lane=>snap.every(r=>r===q||Math.abs(r.l-lane)>halfWidth*2+.4||Math.abs(gapTo(r))>14+q.v*.12);
+  const ahead=snap.filter(r=>r!==q&&gapTo(r)>0&&Math.abs(r.l-q.l)<halfWidth*2+.4).sort((a,b)=>gapTo(a)-gapTo(b))[0];
+  if(c.passTarget){const r=snap.find(r=>r.c===c.passTarget);if(!r||gapTo(r)<-15){c.passTarget=null;if(free(0))c.targetLane=0}}
+  if(ahead&&gapTo(ahead)<45+q.v*.35&&!c.passTarget&&k<.035){
+    const closing=q.v-ahead.v,urge=c.aggression||.5;
+    if(closing>.3+(1-urge)*1.2||ahead.v<q.v*.9){
+      const choices=[-Math.min(laneLimit,5.5),Math.min(laneLimit,5.5)].sort((a,b)=>Math.abs(a-q.l)-Math.abs(b-q.l));
+      const lane=choices.find(l=>Math.abs(l-ahead.l)>halfWidth*2+.4&&free(l));
+      if(lane!==undefined){c.targetLane=lane;c.passTarget=ahead.c}
+    }
+  }
+  let target=Math.max(-laneLimit,Math.min(laneLimit,c.targetLane||0));
+  if(Math.abs(target-q.l)>.1&&!free(target))target=q.l;
+  const shift=Math.max(-1,Math.min(1,target-q.l))*dt*(1.5+score('stability',c)*1.5)*Math.max(.25,1-k*15);
+  c.lateral=Math.max(-laneLimit,Math.min(laneLimit,q.l+shift));
+  // 앞차까지의 제동거리와 이번 단계에서 이동 가능한 실제 공간을 함께 제한합니다.
+  if(ahead&&Math.abs(c.lateral-ahead.l)<halfWidth*2+.4){
+    const gap=gapTo(ahead),room=Math.max(0,gap-10.5);
+    c.trafficCap=Math.min(Math.sqrt(ahead.v*ahead.v+2*brakeCapacity(m,q.v)*room),room/dt);
+  }
+ }
+}
+function raceStep(dt,time){trafficStep(dt);updatePlayerCar(dt,time);updateAICars(dt,time)}
 
 function updatePlayerCar(dt,elapsed){updateCar(player,dt,elapsed,0)}
 function updateAICars(dt,elapsed){ais.forEach((car,i)=>updateCar(car,dt,elapsed,i+1))}
@@ -583,7 +633,7 @@ function startCountdown(){if(phase!=='preview')return;
   // 출발 직전에 한 번만 기존 AI 객체를 만들고, 카운트다운과 레이스에 계속 사용합니다.
   ais.push(...createAICars());cars=[player,...ais];
   cars.forEach((car,i)=>{
-    car.progress=i===0?0:-(Math.ceil(i/2)*6)/length;
+    car.progress=-(Math.floor(i/2)*13)/length;car.lateral=i%2?-3.2:3.2;car.targetLane=car.lateral;car.aggression=[.5,.85,.35,.7,.55][i];car.passTarget=null;
     Object.assign(car,{laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity});initializePhysics(car);placeCar(car,i);
   });
   raceMap.hidden=false;updateMinimap();phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-27).add(new THREE.Vector3(0,19,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
@@ -617,7 +667,7 @@ function skipToFinish(){
     const deadline=performance.now()+8;
     do{
       elapsed+=PHYSICS_STEP;
-      updatePlayerCar(PHYSICS_STEP,elapsed);updateAICars(PHYSICS_STEP,elapsed);
+      raceStep(PHYSICS_STEP,elapsed);
       if(cars.every(car=>car.finished)){
         cars.forEach((car,i)=>placeCar(car,i));
         finishSimulation();
@@ -639,7 +689,7 @@ function resetSimulation(){
   skipGeneration++;lastFrame=performance.now();
   ais.forEach(car=>scene.remove(car.mesh));ais.length=0;cars=[player];
   Object.assign(player,{progress:0,laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity});
-  placeCar(player,0);physicsAccumulator=0;elapsed=0;countEnd=0;isPaused=false;phase='preview';
+  player.lateral=0;player.targetLane=0;player.passTarget=null;placeCar(player,0);physicsAccumulator=0;elapsed=0;countEnd=0;isPaused=false;phase='preview';
   document.getElementById('pause').textContent='⏸ PAUSE';document.getElementById('pause').hidden=true;document.getElementById('raceActions').hidden=true;
   document.getElementById('back').hidden=true;document.getElementById('hud').hidden=true;
   document.getElementById('previewPanels').hidden=false;raceMap.hidden=true;mapMarkers.forEach(dot=>dot.remove());mapMarkers.length=0;document.getElementById('start').hidden=false;
@@ -655,7 +705,7 @@ function animate(now){requestAnimationFrame(animate);const dt=Math.max(0,Math.mi
   else if(phase==='running'&&!isPaused){
     physicsAccumulator+=dt;
     while(physicsAccumulator>=PHYSICS_STEP){
-      elapsed+=PHYSICS_STEP;updatePlayerCar(PHYSICS_STEP,elapsed);updateAICars(PHYSICS_STEP,elapsed);
+      elapsed+=PHYSICS_STEP;raceStep(PHYSICS_STEP,elapsed);
       physicsAccumulator-=PHYSICS_STEP;
       if(player.finished&&ais.every(car=>car.finished)){physicsAccumulator=0;finishSimulation();break}
     }
