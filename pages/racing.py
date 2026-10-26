@@ -276,10 +276,38 @@ def render_racing_component(document):
     """준비 화면의 서킷 선택만 Python 세션으로 전달합니다."""
     import tempfile
     import uuid
-    folder = st.session_state.setdefault("f1_component_folder", tempfile.mkdtemp(prefix="f1_circuit_"))
+    import sys
+    import types
+    import importlib.machinery
+    # 페이지 실행 모듈(__main__)의 spec 유무에 의존하지 않는 선언 전용 모듈입니다.
+    # 세션별 실제 HTML 디렉터리와 등록 이름을 함께 고정해 이름/경로 충돌을 막습니다.
     token = st.session_state.setdefault("f1_component_token", uuid.uuid4().hex)
-    Path(folder, "index.html").write_text(document, encoding="utf-8")
-    component = components.declare_component("f1_circuit_racing", path=folder)
+    folder = st.session_state.get("f1_component_folder")
+    if not folder or not Path(folder).is_dir():
+        folder = tempfile.mkdtemp(prefix="f1_circuit_")
+        st.session_state["f1_component_folder"] = folder
+    folder = str(Path(folder).resolve())
+    target = Path(folder, "index.html")
+    try:
+        if not target.exists() or target.read_text(encoding="utf-8") != document:
+            target.write_text(document, encoding="utf-8")
+        if not target.is_file() or not target.stat().st_size:
+            raise OSError("컴포넌트 HTML 파일이 비어 있습니다.")
+        module_name = "f1_racing_component_" + token
+        module = sys.modules.get(module_name)
+        if module is None:
+            module = types.ModuleType(module_name)
+            module.__file__ = str(Path(folder, "registration.py"))
+            module.__spec__ = importlib.machinery.ModuleSpec(module_name, loader=None)
+            sys.modules[module_name] = module
+            # inspect가 선언 호출자의 모듈을 찾을 수 있도록 등록 후 함수를 생성합니다.
+            source = "import streamlit.components.v1 as components\ndef declare(folder):\n    return components.declare_component('f1_circuit_racing', path=folder)\n"
+            exec(compile(source, module.__file__, "exec"), module.__dict__)
+        component = module.declare(folder)
+    except (OSError, RuntimeError) as error:
+        st.error("레이싱 화면 구성 파일을 준비하거나 등록하지 못했습니다. 아래 오류 상세를 확인해 주세요.")
+        st.exception(error)
+        return
     current = st.session_state.get("f1_active_circuit", "monaco")
     selected = component(key="f1_racing_" + token + "_" + current, default=None)
     if isinstance(selected, str) and selected in CIRCUITS and selected != current:
