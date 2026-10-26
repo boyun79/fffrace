@@ -104,9 +104,13 @@ def apply_page_style():
 BUILDER_JS = "\nfunction createF1Car(color, cfg) {\n    const car=new THREE.Group(), partGroups={};\n    const mat=(color,metal=.45,rough=.32)=>new THREE.MeshStandardMaterial({color,metalness:metal,roughness:rough});\n    function group(name){const g=new THREE.Group();g.userData.part=name;partGroups[name]=g;car.add(g);return g}\n    function mesh(g,geo,material,pos=[0,0,0],rot=[0,0,0],scale=[1,1,1]){const m=new THREE.Mesh(geo,material);m.position.set(...pos);m.rotation.set(...rot);m.scale.set(...scale);m.castShadow=true;m.receiveShadow=true;m.userData.part=g.userData.part;g.add(m);return m}\n    function capsule(length,radius){return new THREE.CapsuleGeometry(radius,length,8,20)}\n    // 두 지점 사이에 실제 두께가 있는 서스펜션 암을 만드는 도우미입니다.\n    function rodBetween(g,a,b,radius,material){const start=new THREE.Vector3(...a),end=new THREE.Vector3(...b),mid=start.clone().add(end).multiplyScalar(.5),length=start.distanceTo(end);const rod=mesh(g,new THREE.CylinderGeometry(radius,radius,length,12),material,[mid.x,mid.y,mid.z]);rod.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),end.clone().sub(start).normalize());return rod}\n    // 매끈한 곡면 차체: 길쭉한 캡슐과 유선형 노즈를 겹쳐 실제 포뮬러카 실루엣을 만듭니다.\n    const body=group('body'), red=mat(color,.72,.24);mesh(body,capsule(3.1,.65),red,[0,.05,0],[Math.PI/2,0,0],[1,1,1]);mesh(body,new THREE.ConeGeometry(.62,4.5,32),red,[0,-.08,3.35],[Math.PI/2,0,0],[1,.55,1]);\n    mesh(body,new THREE.SphereGeometry(1.0,32,18),red,[0,.05,-1.35],[0,0,0],[1.35,.78,1.75]);\n    // 콕핏과 Halo\n    const cockpit=group('cockpit');mesh(cockpit,new THREE.SphereGeometry(.64,28,16,0,Math.PI*2,0,Math.PI*.62),mat(0x111820,.15,.16),[0,.65,-.25],[0,0,0],[1,.62,1.45]);\n    const haloMat=mat(0x242c35,.75,.2);mesh(cockpit,new THREE.TorusGeometry(.62,.055,10,36,Math.PI*1.25),haloMat,[0,1.08,-.05],[Math.PI/2,0,.39]);mesh(cockpit,new THREE.CylinderGeometry(.06,.06,.72,12),haloMat,[0,.82,.35],[0,0,0]);\n    // 사이드포드: 앞은 넓고 뒤로 갈수록 좁아지는 곡면\n    const side=group('sidepods');[-1,1].forEach(s=>{mesh(side,capsule(1.35,.52),red,[s*1.02,-.05,-.65],[Math.PI/2,0,0],[1,.72,1.25]);mesh(side,new THREE.ConeGeometry(.48,2.2,24),red,[s*.94,-.08,-2.0],[-Math.PI/2,0,0],[.75,1,.9])});\n    // 타이어는 실제 회전축을 가진 두꺼운 Torus 3D 메시입니다.\n    const tyres=group('tyres'), tv=cfg.tyres.variant, tyreMat=mat(0x08090b,.05,.58+tv*.1), stripe=mat(cfg.tyres.color,.15,.38);[[-1.55,1.95,.56], [1.55,1.95,.56],[-1.72,-2.15,.72],[1.72,-2.15,.72]].forEach(p=>{const [x,z,r]=p;mesh(tyres,new THREE.TorusGeometry(r,r*(.43-tv*.045),18+tv*5,42),tyreMat,[x,-.35,z],[0,Math.PI/2,0]);mesh(tyres,new THREE.TorusGeometry(r*.99,.035,8,48),stripe,[x,-.35,z],[0,Math.PI/2,0])});\n    // 프론트 윙: 날개 단면을 가진 여러 곡선형 엘리먼트\n    const fw=group('frontWing'), fwM=mat(cfg.frontWing.color,.65,.22), f=cfg.frontWing.shape;Array.from({length:2+cfg.frontWing.variant},(_,i)=>-.18+i*.22).forEach((y,i)=>mesh(fw,new THREE.CapsuleGeometry(.11,3.2*f,6,20),fwM,[0,-.58+y,3.62-i*.25],[0,0,Math.PI/2],[1,1,1]));[-1,1].forEach(s=>mesh(fw,new THREE.ExtrudeGeometry(new THREE.Shape().moveTo(0,0).lineTo(.44,.12).lineTo(.28,.65).lineTo(0,.52),{depth:.06,bevelEnabled:true,bevelSize:.025,bevelThickness:.025}),fwM,[s*1.75*f,-.88,3.35],[0,s<0?0:Math.PI,0]));\n    // 리어 윙: 선택에 따라 폭과 높이가 실제로 변합니다.\n    const rw=group('rearWing'), rwM=mat(cfg.rearWing.color,.68,.2), r=cfg.rearWing.shape;mesh(rw,new THREE.CapsuleGeometry(.16,2.55*r,6,20),rwM,[0,1.05,-3.24],[0,0,Math.PI/2]);Array.from({length:1+cfg.rearWing.variant},(_,i)=>mesh(rw,new THREE.CapsuleGeometry(.09,2.35*r,6,20),rwM,[0,.72-i*.22,-3.0+i*.08],[0,0,Math.PI/2]));[-1,1].forEach(s=>mesh(rw,new THREE.CylinderGeometry(.045,.06,1.3,10),rwM,[s*.92*r,.35,-3.05],[0,0,0]));\n    const floor=group('floor');const floorShape=new THREE.Shape().moveTo(-1.25,-2.7).lineTo(-1.25,1.4).lineTo(-.8,2.8).lineTo(.8,2.8).lineTo(1.25,1.4).lineTo(1.25,-2.7).lineTo(-1.25,-2.7);mesh(floor,new THREE.ExtrudeGeometry(floorShape,{depth:.09,bevelEnabled:true,bevelSize:.04,bevelThickness:.03}),mat(cfg.floor.color,.7,.25),[0,-.92,0],[Math.PI/2,0,0]);\n    const diffuser=group('diffuser'), dm=mat(cfg.diffuser.color,.72,.22);[-.72,-.24,.24,.72].forEach(x=>mesh(diffuser,new THREE.BoxGeometry(.055,.7,1.35*cfg.diffuser.shape),dm,[x,-.62,-3.08],[.38,0,0]));\n    const brakes=group('brakes'), bv=cfg.brakes.variant;[[-1.55,1.95],[1.55,1.95],[-1.72,-2.15],[1.72,-2.15]].forEach(p=>mesh(brakes,new THREE.CylinderGeometry(.38-bv*.055,.38-bv*.055,.07,24+bv*8),mat(cfg.brakes.color,.8,.28),[p[0],-.35,p[1]],[0,0,Math.PI/2]));\n    // 앞·뒤 바퀴 허브와 차체를 위/아래 위시본 및 푸시로드로 연결합니다.\n    const suspension=group('suspension'), sv=cfg.suspension.variant, suspensionMat=mat(cfg.suspension.color,.82,.18), armRadius=.055-sv*.007;\n    [[1.95,1.55],[-2.15,1.72]].forEach(([z,wheelX])=>[-1,1].forEach(side=>{\n      const hub=[side*wheelX,-.34,z], innerX=side*.62;\n      rodBetween(suspension,[innerX,-.28,z-.48],hub,armRadius,suspensionMat);\n      rodBetween(suspension,[innerX,-.28,z+.48],hub,armRadius,suspensionMat);\n      rodBetween(suspension,[innerX,.25,z-.30],hub,armRadius*.9,suspensionMat);\n      rodBetween(suspension,[innerX,.25,z+.30],hub,armRadius*.9,suspensionMat);\n      rodBetween(suspension,[side*.48,.48,z],hub,armRadius*.82,suspensionMat);\n      mesh(suspension,new THREE.SphereGeometry(.12,16,10),suspensionMat,hub);\n    }));\n    const engine=group('engine'), ev=cfg.engine.variant;mesh(engine,new THREE.CapsuleGeometry(.50-ev*.06,1.45-ev*.12,8,18),mat(cfg.engine.color,.65,.24),[0,.22,-1.75],[Math.PI/2,0,0]);\n    const ers=group('ers'), erv=cfg.ers.variant;mesh(ers,new THREE.TorusGeometry(.30-erv*.035,.075-erv*.01,10,28+erv*8),mat(cfg.ers.color,.5,.15),[0,.68,-1.38],[Math.PI/2,0,0]);\n\n  return car;\n}\n"
 
 
+
+# 공식 실측 좌표가 아닌 특징 기반 게임용 폐곡선입니다.
+CIRCUITS = {'monaco': {'name': 'Monaco Circuit', 'width': 10, 'points': [[-170, 100], [-180, -20], [-140, -100], [-40, -135], [60, -125], [130, -80], [150, -10], [100, 20], [45, -15], [0, 10], [45, 65], [130, 85], [150, 140], [80, 165], [-30, 150], [-110, 180]], 'description': '도심형 게임 레이아웃 · 짧은 직선과 연속 코너'}, 'british': {'name': 'British Circuit', 'width': 14, 'points': [[-280, 150], [-300, -60], [-230, -180], [-90, -200], [25, -120], [140, -180], [270, -160], [300, -40], [220, 40], [110, 20], [50, 110], [140, 200], [30, 270], [-100, 230], [-160, 130]], 'description': '균형형 게임 레이아웃 · 긴 직선과 고속·저속 코너'}, 'australian': {'name': 'Australian Circuit', 'width': 14, 'points': [[-380, 160], [-380, -100], [-300, -200], [-120, -220], [100, -200], [310, -160], [380, -50], [350, 100], [270, 150], [100, 140], [40, 230], [-100, 260], [-220, 200]], 'description': '고속형 게임 레이아웃 · 긴 직선과 완만한 코너'}}
+
 def build_simulation_html(car_data, opponents):
     """준비 화면부터 결과까지 하나의 iframe에서 실행하여 rerun에 따른 중단을 방지합니다."""
-    data = {"car": car_data, "laps": TOTAL_LAPS, "opponents": [dict(prepare_car_data(c["config"], c["performance"]), id=c["id"]) for c in opponents]}
+    data = {"circuit": CIRCUITS[st.session_state.get("f1_active_circuit", "monaco")], "car": car_data, "laps": TOTAL_LAPS, "opponents": [dict(prepare_car_data(c["config"], c["performance"]), id=c["id"]) for c in opponents]}
     # </script> 삽입을 막고 기존 Garage 값의 JSON 구조는 그대로 유지합니다.
     payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
     # Garage의 .perf 카드 구조를 재사용합니다. 변화량은 저장되지 않으므로 표시하지 않습니다.
@@ -268,6 +272,28 @@ def opponent_preparation(player_config):
     return roster, details
 
 
+@st.fragment
+def circuit_controls():
+    """선택은 이 영역만 갱신하여 실행 중인 iframe 경주를 중단하지 않습니다."""
+    st.markdown("### 트랙 선택")
+    current = st.session_state.get("f1_active_circuit", "monaco")
+    pending = st.session_state.get("f1_pending_circuit", current)
+    cols = st.columns(3)
+    for col, (key, spec) in zip(cols, CIRCUITS.items()):
+        with col:
+            if st.button("🏁 " + spec["name"], key="circuit_" + key,
+                         use_container_width=True, type="primary" if pending == key else "secondary"):
+                st.session_state["f1_pending_circuit"] = key
+                st.rerun(scope="fragment")
+    pending = st.session_state.get("f1_pending_circuit", current)
+    st.caption("현재: " + CIRCUITS[current]["name"] + " · 선택: " + CIRCUITS[pending]["name"])
+    st.caption(CIRCUITS[pending]["description"] + " · 공식 좌표가 아닌 게임용 레이아웃")
+    st.info("선택만 하면 진행 중인 경주는 유지됩니다. 경주 종료 후 아래 버튼으로 선택한 서킷의 준비 화면을 여세요. 적용하면 현재 경주는 종료됩니다.")
+    if st.button("🏁 선택한 서킷의 레이싱 준비 화면 열기", key="apply_circuit", use_container_width=True):
+        st.session_state["f1_active_circuit"] = pending
+        st.rerun()
+
+
 def main():
     st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏁",
                        layout="wide", initial_sidebar_state="collapsed")
@@ -300,11 +326,13 @@ def main():
     opponents, showing_details = opponent_preparation(config)
     if showing_details:
         return
+    st.session_state.setdefault("f1_active_circuit", "monaco")
     car_data = prepare_car_data(config, performance)
     st.markdown("<div class='head'><div class='logo'>F1 <b>RACING SIMULATOR</b></div>"
                 "<div class='step'>MY 3D F1 CAR · TRACK TEST CIRCUIT</div></div>",
                 unsafe_allow_html=True)
     components.html(_f1_layout_html(build_simulation_html(car_data, opponents)), height=720, scrolling=True)
+    circuit_controls()
 
 
 SIMULATION_HTML = r'''<!doctype html><html lang="ko"><head><meta charset="utf-8">
@@ -337,19 +365,22 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 import * as THREE from 'three';
 const DATA=__DATA__,root=document.getElementById('game');
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x08121a);
-const camera=new THREE.PerspectiveCamera(52,1,.1,500);
+const camera=new THREE.PerspectiveCamera(52,1,.1,5000);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true;root.insertBefore(renderer.domElement,root.firstChild);
 scene.add(new THREE.HemisphereLight(0xd2e8ff,0x13231b,2.1));
 const sun=new THREE.DirectionalLight(0xffffff,2.9);sun.position.set(-25,65,20);sun.castShadow=true;scene.add(sun);
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(260,260),new THREE.MeshStandardMaterial({color:0x10201e,roughness:1}));
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(2400,2400),new THREE.MeshStandardMaterial({color:0x10201e,roughness:1}));
 ground.rotation.x=-Math.PI/2;ground.position.y=-.08;ground.receiveShadow=true;scene.add(ground);
 __CAR_BUILDER__
 // 하나의 폐쇄형 중심선이 미리보기·노면·주행 모두에 사용됩니다.
-function createWaypoints(){return [[-48,0,25],[-42,0,-23],[-30,0,-39],[12,0,-42],[42,0,-29],[50,0,-8],[42,0,15],[20,0,26],[37,0,37],[11,0,43],[-12,0,27],[-34,0,35]].map(p=>new THREE.Vector3(...p))}
+function createWaypoints(){return DATA.circuit.points.map(([x,z])=>new THREE.Vector3(x,0,z))}
 const trackWaypoints=createWaypoints();
-const curve=new THREE.CatmullRomCurve3(trackWaypoints,true,'catmullrom',.35);
-const roadWidth=12, length=curve.getLength();
+// 점 간격 차이에 따른 과도한 튀어나옴을 줄이는 공통 중심선입니다.
+const curve=new THREE.CatmullRomCurve3(trackWaypoints,true,'centripetal');
+curve.arcLengthDivisions=4096;curve.updateArcLengths();
+const roadWidth=DATA.circuit.width, length=curve.getLength();
+document.querySelector('#trackPanel .previewTitle').textContent=DATA.circuit.name;
 function frameAt(t){const p=curve.getPointAt((t+1)%1),v=curve.getTangentAt((t+1)%1).normalize();return {p,v,side:new THREE.Vector3(v.z,0,-v.x)}}
 function createTrack(){
   const N=500,vertices=[],indices=[],roadMat=new THREE.MeshStandardMaterial({color:0x282e34,roughness:.94,side:THREE.DoubleSide});
