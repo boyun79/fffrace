@@ -210,6 +210,20 @@ st.markdown("""<style>
 
 </style>""", unsafe_allow_html=True)
 
+st.markdown("""<style>
+@import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@600;700&family=Noto+Sans+KR:wght@400;600;700&display=swap');
+.stApp{background:radial-gradient(circle at 52% 17%,#202a36 0,#090c11 47%,#05070a 100%);color:#eef3f8;font-family:'Noto Sans KR',sans-serif}
+[data-testid="stMainBlockContainer"]{max-width:1680px!important;padding:0 clamp(.75rem,2vw,1.7rem) 2rem!important}
+[data-testid="stSidebar"],[data-testid="stSidebarCollapsedControl"]{display:none!important}
+.f1-game-head{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:3px solid #ff3158;border-bottom:1px solid #27313d;padding:10px 16px;background:#0c1118;margin-bottom:10px}
+.f1-game-head .logo{font:700 25px Oxanium,sans-serif;letter-spacing:2px;color:#eef3f8}.f1-game-head b{color:#ff3158}.f1-game-head .step{font:600 11px Oxanium,sans-serif;color:#8794a3;letter-spacing:2px}
+[data-testid="stChatMessage"]{min-width:0;margin:12px 0;padding:16px;background:#111c29!important;border:1px solid #304255!important;border-radius:10px}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]){background:#281b27!important;border-color:#744052!important;border-left:3px solid #ff3158!important}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"], [data-testid="stChatMessage"] p,[data-testid="stChatMessage"] li{color:#eef3f8!important;line-height:1.8;overflow-wrap:anywhere}
+.stApp div[data-testid="stButton"] button{text-align:left!important;padding:8px 12px!important}
+@media(max-width:650px){.f1-game-head{flex-wrap:wrap}.f1-game-head .logo{font-size:20px}[data-testid="stChatMessage"]{padding:12px}}
+</style><div class="f1-game-head"><div class="logo">F1 <b>RACING SIMULATOR</b></div><div class="step">AI RACE ENGINEER</div></div>""", unsafe_allow_html=True)
+
 # 이동 버튼은 대화 상태나 차량 데이터를 초기화하지 않습니다.
 nav = st.columns(3)
 with nav[0]:
@@ -219,7 +233,7 @@ with nav[1]:
 with nav[2]:
     st.button("🏎️ 레이싱 시뮬레이션 시작", key="engineer_racing", on_click=move_page, args=("pages/racing.py",), disabled=state["busy"], use_container_width=True)
 
-st.markdown('''<section class="f1-hero"><div class="f1-brand">F1 RACING SIMULATOR</div><h1 class="f1-title">AI RACE ENGINEER</h1><div class="f1-subtitle">차량의 문제를 분석하고 더 나은 셋업을 찾아보세요.</div></section>''', unsafe_allow_html=True)
+
 st.caption("질문을 보낼 때마다 현재 설계와 성능을 확인합니다. 추천만 제공하며 실제 부품은 차량 설계 화면에서 직접 변경해 주세요. 같은 연결에서는 대화가 유지됩니다.")
 if not isinstance(st.session_state.get("my_car_config"), dict) or not st.session_state.get("my_car_config"):
     st.info("현재 차량 설정이 없습니다. 위 차량 설계 버튼으로 이동해 부품을 선택하면 다음 질문부터 반영됩니다.")
