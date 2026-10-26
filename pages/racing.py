@@ -391,7 +391,7 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 #raceActions #instantResult:hover{border-color:#ff3158;background:#221a29}
 #game:has(#raceActions:not([hidden])) #back{bottom:62px;right:12px}
 </style><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.164.1/build/three.module.js"}}</script>
-</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><div id="raceActions" hidden><button id="pause" hidden>⏸ PAUSE</button><button id="instantResult">⏭️ 결과 바로 보기</button></div><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
+</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel lap">LAP<br><b id="lap">1 / 3</b></div><div id="raceActions" hidden><button id="pause" hidden>⏸ PAUSE</button><button id="instantResult">⏭ SKIP</button></div><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
 <div id="overlay"><p id="message"></p><h1 id="count"></h1><button id="start">SIMULATION START</button><div id="result"></div></div><div id="error"></div></div>
 <script type="module">
 import * as THREE from 'three';
@@ -575,9 +575,10 @@ function rank(){return 1+ais.filter(c=>{
 const targetCamera=new THREE.Vector3();
 function updateCamera(dt){let f=frameAt(player.progress);targetCamera.copy(player.mesh.position).addScaledVector(f.v,-16).add(new THREE.Vector3(0,8,0));camera.position.lerp(targetCamera,1-Math.exp(-4*dt));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z)}
 function updateHUD(){document.getElementById('position').textContent=rank()+' / 5';document.getElementById('lap').textContent=Math.min(3,player.laps+1)+' / 3';document.getElementById('speed').textContent=Math.round(player.speed)}
+let resultFramePending=false;
 let physicsAccumulator=0;
 let phase='preview',countEnd=0,startTime=0,lastFrame=performance.now(),elapsed=0,isPaused=false;
-document.getElementById('pause').addEventListener('click',()=>{if(phase!=='running')return;isPaused=!isPaused;document.getElementById('pause').textContent=isPaused?'▶ RESUME':'⏸ PAUSE'});
+document.getElementById('pause').addEventListener('click',()=>{if(phase!=='running')return;isPaused=!isPaused;lastFrame=performance.now();document.getElementById('pause').textContent=isPaused?'▶ RESUME':'⏸ PAUSE'});
 function startCountdown(){if(phase!=='preview')return;
   // 출발 직전에 한 번만 기존 AI 객체를 만들고, 카운트다운과 레이스에 계속 사용합니다.
   ais.push(...createAICars());cars=[player,...ais];
@@ -588,21 +589,54 @@ function startCountdown(){if(phase!=='preview')return;
   raceMap.hidden=false;updateMinimap();phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-27).add(new THREE.Vector3(0,19,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
 function startSimulation(now){document.getElementById('back').hidden=false;phase='running';physicsAccumulator=0;elapsed=0;startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('raceActions').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
 function finishSimulation(interrupted=false){
-  if(phase!=='running')return;
+  if(phase!=='running'&&phase!=='skipping')return;
   // 완주 여부나 기록을 수정하지 않고 현재 순위와 실제 기록만 표시합니다.
-  phase='complete';physicsAccumulator=0;isPaused=false;
+  phase='complete';resultFramePending=true;physicsAccumulator=0;isPaused=false;
   const lapText=v=>Number.isFinite(v)&&v>0?v.toFixed(2)+' sec':'기록 없음';
   const completed=Math.max(0,Math.min(DATA.laps,player.laps));
   raceMap.hidden=true;document.getElementById('back').hidden=false;
   document.getElementById('overlay').style.display='flex';
   document.getElementById('result').style.display='block';
-  document.getElementById('result').innerHTML='<div class="result-title">레이스 결과</div><div class="result-sub">'+(interrupted?'중도 종료':'RACE COMPLETED')+'</div><div class="result-rank"><span>'+(interrupted?'종료 시점 순위':'최종 순위')+'</span><strong>'+rank()+' / '+cars.length+'</strong></div><div class="result-grid"><div class="result-card"><span>완주 랩 수</span><b>'+completed+'</b></div><div class="result-card"><span>최고속도</span><b>'+Math.round(Number.isFinite(player.top)?player.top:0)+' km/h</b></div><div class="result-card"><span>랩타임</span><b>'+lapText(player.lastLap)+'</b></div><div class="result-card"><span>최고 랩타임</span><b>'+lapText(player.best)+'</b></div></div>';
+  document.getElementById('result').innerHTML='<div class="result-title">레이스 결과</div><div class="result-sub">'+(interrupted?'중도 종료':'RACE COMPLETED')+'</div><div class="result-rank"><span>'+(interrupted?'종료 시점 순위':'최종 순위')+'</span><strong>'+rank()+' / '+cars.length+'</strong></div><div class="result-grid"><div class="result-card"><span>완주 랩 수</span><b>'+completed+'</b></div><div class="result-card"><span>최고속도</span><b>'+Math.round(Number.isFinite(player.top)?player.top:0)+' km/h</b></div><div class="result-card"><span>완주 시간</span><b>'+lapText(player.finishTime)+'</b></div><div class="result-card"><span>랩타임</span><b>'+lapText(player.lastLap)+'</b></div><div class="result-card"><span>최고 랩타임</span><b>'+lapText(player.best)+'</b></div></div>';
   document.getElementById('hud').hidden=true;
   document.getElementById('pause').hidden=true;
   document.getElementById('raceActions').hidden=true;
 }
-document.getElementById('instantResult').addEventListener('click',()=>finishSimulation(true));
+// 실시간 주행과 같은 1/120초 단계를 사용하되 장면 배치/렌더는 생략합니다.
+let skipGeneration=0;
+function skipToFinish(){
+  if(phase!=='running')return;
+  phase='skipping';isPaused=false;
+  const generation=++skipGeneration;
+  document.getElementById('instantResult').disabled=true;
+  document.getElementById('instantResult').textContent='⏳ CALCULATING';
+  document.getElementById('pause').disabled=true;
+  document.getElementById('back').disabled=true;
+  function batch(){
+    if(phase!=='skipping'||generation!==skipGeneration)return;
+    const deadline=performance.now()+8;
+    do{
+      elapsed+=PHYSICS_STEP;
+      updatePlayerCar(PHYSICS_STEP,elapsed);updateAICars(PHYSICS_STEP,elapsed);
+      if(cars.every(car=>car.finished)){
+        cars.forEach((car,i)=>placeCar(car,i));
+        finishSimulation();
+        document.getElementById('back').disabled=false;
+        document.getElementById('pause').disabled=false;
+        document.getElementById('instantResult').disabled=false;
+        document.getElementById('instantResult').textContent='⏭ SKIP';
+        return;
+      }
+    }while(performance.now()<deadline);
+    // 짧은 작업 단위로 나누어 브라우저 UI가 응답할 시간을 줍니다.
+    setTimeout(batch,0);
+  }
+  setTimeout(batch,0);
+}
+document.getElementById('instantResult').addEventListener('click',skipToFinish);
 function resetSimulation(){
+  if(phase==='skipping')return;
+  skipGeneration++;lastFrame=performance.now();
   ais.forEach(car=>scene.remove(car.mesh));ais.length=0;cars=[player];
   Object.assign(player,{progress:0,laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity});
   placeCar(player,0);physicsAccumulator=0;elapsed=0;countEnd=0;isPaused=false;phase='preview';
@@ -628,6 +662,9 @@ function animate(now){requestAnimationFrame(animate);const dt=Math.max(0,Math.mi
     cars.forEach((car,i)=>{placeCar(car,i);if(!car.finished&&car.mesh.userData.rotateWheels)car.mesh.userData.rotateWheels(car.speed*dt*.06)});
     updateCamera(dt);updateHUD();updateMinimap();
   }
+  if(phase==='skipping')return;
+  if(phase==='complete'&&!resultFramePending)return;
+  if(phase==='complete')resultFramePending=false;
   if(phase==='preview'){
     // 왼쪽 SVG에는 차량이 없고 가운데에는 기존 Three.js 차량만 렌더링합니다.
     const box=carPanel.getBoundingClientRect(),outer=root.getBoundingClientRect(),dpr=renderer.getPixelRatio();
