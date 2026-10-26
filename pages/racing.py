@@ -419,17 +419,22 @@ cars.forEach((car,i)=>{car.progress=i===0?0:1-i*.009;placeCar(car,i)});
 const PHYSICS_STEP=1/120, PROFILE_SIZE=720;
 function vehicleModel(car){
   const t=score('topSpeed',car),g=score('grip',car),d=score('downforce',car),c=score('cornering',car),b=score('braking',car),s=score('stability',car);
-  return {maxSpeed:(150+200*t)/3.6,drive:3+9*t,mu:.75+1.35*g,
-    aero:.00012+.00040*d,drag:.00015+.0006*d,
-    corner:.65+.45*c,brake:4+13*b,stability:.82+.18*s};
+  // 부품 평균으로 좁아진 점수 범위에 맞춘 게임용 감도입니다. 저장 점수는 바꾸지 않습니다.
+  // 월드 좌표 1단위=1m, 내부 속도=m/s, 차량 저장값과 HUD=km/h입니다.
+  const power=(t-.45)/.5;
+  return {maxSpeed:(210+145*power)/3.6,drive:12+24*power,mu:1.1+2.8*g,
+    aero:.00008+.00022*d,drag:.00007+.00018*d,
+    corner:.55+1.05*c,brake:10+27*b,stability:.65+.35*s};
 }
-function lateralCapacity(m,v){return m.mu*9.81*(1+m.aero*v*v)*m.corner*m.stability}
+// 짧은 기존 트랙을 위한 공통 아케이드 코너 접지 배율입니다. 특정 차량 보정이 아닙니다.
+function lateralCapacity(m,v){return 2.4*m.mu*9.81*(1+m.aero*v*v)*m.corner*m.stability}
 function brakeCapacity(m,v){return Math.min(m.brake,m.mu*9.81*(1+m.aero*v*v))*m.stability}
 function acceleration(m,v,k){
-  const used=Math.min(.99,v*v*k/Math.max(.1,lateralCapacity(m,v)));
-  const traction=m.mu*9.81*Math.sqrt(Math.max(.02,1-used*used));
-  const engine=m.drive*Math.max(0,1-Math.pow(v/m.maxSpeed,2));
-  return Math.max(0,Math.min(traction,engine)-m.drag*v*v);
+  const used=Math.min(1,v*v*k/Math.max(.1,lateralCapacity(m,v)));
+  const traction=m.mu*9.81*Math.sqrt(Math.max(0,1-used*used));
+  // 고속에서 구동력이 너무 일찍 사라지지 않게 하고 항력은 한 번만 차감합니다.
+  const engine=m.drive*Math.max(.3,1-.55*Math.pow(v/m.maxSpeed,2));
+  return Math.min(traction,engine)-m.drag*v*v;
 }
 function cornerLimit(m,k){
   if(k<1e-6)return m.maxSpeed;
@@ -467,7 +472,7 @@ function updateCar(car,dt,endTime,index){
   const v=Math.max(0,Number.isFinite(car.speed)?car.speed/3.6:0);
   let next;
   if(v>target)next=Math.max(target,v-brakeCapacity(m,v)*dt);
-  else next=Math.min(target,v+acceleration(m,v,trackK[i])*dt);
+  else next=Math.min(target,Math.max(0,v+acceleration(m,v,trackK[i])*dt));
   next=Math.max(0,Math.min(m.maxSpeed,Number.isFinite(next)?next:0));
   const distance=(v+next)*.5*dt,remaining=(1-car.progress)*length;
   car.speed=next*3.6;car.top=Math.max(car.top,car.speed);
@@ -479,8 +484,7 @@ function updateCar(car,dt,endTime,index){
     car.lastLap=crossing-car.lapStart;car.best=Math.min(car.best,car.lastLap);car.lapStart=crossing;
     if(car.laps>=DATA.laps){car.finished=true;car.finishTime=crossing;car.progress=0;car.speed=0}
   }
-  placeCar(car,index);
-  if(!car.finished&&car.mesh.userData.rotateWheels)car.mesh.userData.rotateWheels(car.speed*dt*.06);
+
 }
 
 function updatePlayerCar(dt,elapsed){updateCar(player,dt,elapsed,0)}
@@ -529,6 +533,7 @@ function animate(now){requestAnimationFrame(animate);const dt=Math.max(0,Math.mi
       physicsAccumulator-=PHYSICS_STEP;
       if(player.finished&&ais.every(car=>car.finished)){physicsAccumulator=0;finishSimulation();break}
     }
+    cars.forEach((car,i)=>{placeCar(car,i);if(!car.finished&&car.mesh.userData.rotateWheels)car.mesh.userData.rotateWheels(car.speed*dt*.06)});
     updateCamera(dt);updateHUD();updateMinimap();
   }
   if(phase==='preview'){
