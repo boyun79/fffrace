@@ -19,18 +19,10 @@ METRICS = ["다운포스", "최고속도", "코너링", "그립", "제동", "안
 
 
 def get_part_scores():
-    """Garage와 동일한 옵션 점수입니다. 저장된 성능이 없을 때만 사용합니다."""
-    return {
-        "front_wing":{"low":[48,94,57,61,60,62],"balanced":[72,77,76,72,67,76],"high":[94,55,92,79,72,84]},
-        "rear_wing":{"low":[45,96,54,59,58,56],"balanced":[73,76,76,70,64,78],"high":[96,51,93,77,69,94]},
-        "tyres":{"soft":[66,80,92,98,91,71],"medium":[63,81,80,82,82,82],"hard":[60,82,68,70,73,89]},
-        "brakes":{"race":[62,78,78,76,98,78],"balanced":[61,80,76,74,84,88],"light":[59,85,75,72,75,72]},
-        "suspension":{"stiff":[73,80,91,80,77,67],"balanced":[68,81,82,82,80,88],"soft":[62,78,72,88,83,90]},
-        "floor":{"venturi":[98,72,94,80,67,82],"balanced":[81,80,83,75,66,87],"light":[60,89,68,67,62,69]},
-        "diffuser":{"large":[93,67,90,76,65,87],"balanced":[77,80,79,71,64,83],"compact":[55,91,63,61,61,68]},
-        "engine":{"power":[62,99,82,72,62,70],"balanced":[62,88,80,72,64,87],"efficient":[60,82,79,72,65,92]},
-        "ers":{"attack":[60,97,82,71,65,70],"balanced":[61,88,80,71,68,86],"recovery":[60,80,76,70,78,91]},
-    }
+    """main.py의 실제 부품 표를 공유합니다. 점수 표를 별도 복제하지 않습니다."""
+    parts, _ = garage_rules()
+    return {key: {name: list(option["scores"]) for name, option in part["options"].items()}
+            for key, part in parts.items()}
 
 
 def load_my_car():
@@ -38,31 +30,33 @@ def load_my_car():
     config=st.session_state.get(CAR_CONFIG_KEY) or st.session_state.get(GARAGE_FALLBACK_KEY)
     if not isinstance(config,dict): return None,None
     config=deepcopy(config)
-    performance=st.session_state.get(CAR_PERFORMANCE_KEY)
-    if not isinstance(performance,dict) or not all(k in performance for k in METRICS):
-        performance=calculate_performance(config)
+    performance=calculate_performance(config)
     return config,performance
 
 
 def calculate_performance(config):
-    """Garage 성능 저장값이 없을 때 파츠 평균을 계산합니다."""
-    data=get_part_scores(); totals=[0]*6; count=0
-    for part,choice in config.items():
-        if part in data and choice in data[part]:
-            totals=[a+b for a,b in zip(totals,data[part][choice])]; count+=1
-    return {name:round(value/count) for name,value in zip(METRICS,totals)} if count else None
+    """Garage와 같은 함수를 사용하여 부품과 성능의 일치를 보장합니다."""
+    parts, calculator = garage_rules()
+    return calculator(parts, config)
 
 
 GARAGE_VISUAL_OPTIONS = {'front_wing': {'part': 'frontWing', 'options': {'low': {'color': '#27d6ff', 'shape': 0.82, 'variant': 0}, 'balanced': {'color': '#ffb21a', 'shape': 1.0, 'variant': 1}, 'high': {'color': '#ff3158', 'shape': 1.18, 'variant': 2}}}, 'rear_wing': {'part': 'rearWing', 'options': {'low': {'color': '#27d6ff', 'shape': 0.78, 'variant': 0}, 'balanced': {'color': '#ffb21a', 'shape': 1.0, 'variant': 1}, 'high': {'color': '#ff3158', 'shape': 1.25, 'variant': 2}}}, 'tyres': {'part': 'tyres', 'options': {'soft': {'color': '#ed2939', 'shape': 1.0, 'variant': 0}, 'medium': {'color': '#ffd326', 'shape': 1.0, 'variant': 1}, 'hard': {'color': '#f4f5f6', 'shape': 1.0, 'variant': 2}}}, 'brakes': {'part': 'brakes', 'options': {'race': {'color': '#ff5038', 'shape': 1.0, 'variant': 0}, 'balanced': {'color': '#ffb21a', 'shape': 1.0, 'variant': 1}, 'light': {'color': '#27d6ff', 'shape': 1.0, 'variant': 2}}}, 'suspension': {'part': 'suspension', 'options': {'stiff': {'color': '#ff3158', 'shape': 1.0, 'variant': 0}, 'balanced': {'color': '#ffb21a', 'shape': 1.0, 'variant': 1}, 'soft': {'color': '#27d6ff', 'shape': 1.0, 'variant': 2}}}, 'floor': {'part': 'floor', 'options': {'venturi': {'color': '#9a62ff', 'shape': 1.0, 'variant': 0}, 'balanced': {'color': '#ffb21a', 'shape': 1.0, 'variant': 1}, 'light': {'color': '#27d6ff', 'shape': 1.0, 'variant': 2}}}, 'diffuser': {'part': 'diffuser', 'options': {'large': {'color': '#9a62ff', 'shape': 1.2, 'variant': 0}, 'balanced': {'color': '#ffb21a', 'shape': 1.0, 'variant': 1}, 'compact': {'color': '#27d6ff', 'shape': 0.78, 'variant': 2}}}, 'engine': {'part': 'engine', 'options': {'power': {'color': '#ff3158', 'shape': 1.0, 'variant': 0}, 'balanced': {'color': '#ffb21a', 'shape': 1.0, 'variant': 1}, 'efficient': {'color': '#27d6ff', 'shape': 1.0, 'variant': 2}}}, 'ers': {'part': 'ers', 'options': {'attack': {'color': '#32f59b', 'shape': 1.0, 'variant': 0}, 'balanced': {'color': '#ffb21a', 'shape': 1.0, 'variant': 1}, 'recovery': {'color': '#27d6ff', 'shape': 1.0, 'variant': 2}}}}
 
 def prepare_car_data(config,performance):
     """Garage 이름을 Three.js 생성기가 사용하는 이름으로 한 번만 변환합니다."""
+    parts, calculator = garage_rules()
+    performance = calculator(parts, config)
     appearance = {part["part"]: part["options"].get(config.get(key), next(iter(part["options"].values())))
                   for key, part in GARAGE_VISUAL_OPTIONS.items()}
+    # main.py에는 독립 가속력 지표가 없습니다. 실제 엔진·ERS 옵션의
+    # 최고속도 점수를 구동력의 게임용 대리 지표로 사용합니다(실측 출력 아님).
+    speed_index = METRICS.index("최고속도")
+    propulsion = sum(parts[k]["options"][config[k]]["scores"][speed_index]
+                     for k in ("engine", "ers")) / 2
     return {"appearance":appearance,
         "performance":{"downforce":performance["다운포스"],"topSpeed":performance["최고속도"],
         "cornering":performance["코너링"],"grip":performance["그립"],"braking":performance["제동"],
-        "stability":performance["안정성"]},"config":config}
+        "stability":performance["안정성"],"acceleration":propulsion},"config":dict(config)}
 
 
 def get_f1_car_builder_javascript():
@@ -174,6 +168,7 @@ def generate_opponents(parts, calculator, player_config, previous=None):
     rng = random.SystemRandom()
     keys = list(parts)
     fingerprint = lambda config: tuple(config.get(k) for k in keys)
+    player_performance = calculator(parts, player_config)
     forbidden = {fingerprint(player_config)}
     forbidden.update(fingerprint(c["config"]) for c in (previous or []))
     roster = []
@@ -183,7 +178,7 @@ def generate_opponents(parts, calculator, player_config, previous=None):
             signature = fingerprint(config)
             # 외형뿐 아니라 성능 점수도 서로 다른 조합을 선택합니다.
             performance = calculator(parts, config)
-            if signature in forbidden or performance == calculator(parts, player_config):
+            if signature in forbidden or performance == player_performance:
                 continue
             if any(performance == car["performance"] for car in roster):
                 continue
@@ -226,6 +221,10 @@ def opponent_preparation(player_config):
             except RuntimeError:
                 st.warning("상대 차량을 변경하지 못했습니다. 기존 조합을 유지합니다.")
     roster = st.session_state[OPPONENT_KEY]
+    # 재실행 시 조합은 그대로 두고, 저장 성능이 부품과 어긋나면 바로잡습니다.
+    # 무작위 재생성은 최초 생성과 명시적인 변경 버튼에서만 수행합니다.
+    for car in roster:
+        car["performance"] = dict(calculator(parts, car["config"]))
     if details:
         st.markdown("### AI 상대 차량")
         st.caption("현재 저장된 조합입니다. 성능은 게임 점수이며 실제 속도 단위가 아닙니다.")
@@ -481,8 +480,8 @@ carPanel.addEventListener('pointerup',e=>{if(e.pointerId===dragPointer)dragPoint
 carPanel.addEventListener('pointercancel',()=>{dragPointer=null});
 carPanel.addEventListener('wheel',e=>{if(phase!=='preview')return;e.preventDefault();orbitRadius=Math.max(11,Math.min(25,orbitRadius*Math.exp(e.deltaY*.001)))},{passive:false});
 function score(name,car){let n=Number((car?car.performance:DATA.car.performance)[name]);return Number.isFinite(n)?Math.max(0,Math.min(1,n/100)):.5}
-function createPlayerCar(){let mesh=createF1Car(0xff1748,DATA.car.appearance);scene.add(mesh);return {mesh,performance:DATA.car.performance,progress:0,laps:0,speed:0,finished:false,base:1,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity}}
-function createAICars(){return DATA.opponents.map((data,i)=>{let mesh=createF1Car([0x24bbfa,0xfcc935,0x8de76b,0xb277fa][i],data.appearance);scene.add(mesh);return {mesh,id:data.id,performance:data.performance,progress:0,laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity}})}
+function createPlayerCar(){let mesh=createF1Car(0xff1748,DATA.car.appearance);scene.add(mesh);return {mesh,config:structuredClone(DATA.car.config),performance:{...DATA.car.performance},progress:0,laps:0,speed:0,finished:false,base:1,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity}}
+function createAICars(){return DATA.opponents.map((data,i)=>{let mesh=createF1Car([0x24bbfa,0xfcc935,0x8de76b,0xb277fa][i],data.appearance);scene.add(mesh);return {mesh,id:data.id,config:structuredClone(data.config),performance:{...data.performance},progress:0,laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity}})}
 const player=createPlayerCar(),ais=[];let cars=[player];
 // 미니맵은 준비 화면과 같은 2D 경로를 쓰고 실제 차량 Mesh 위치만 투영합니다.
 const mapSvg=document.getElementById('mapSvg'),raceMap=document.getElementById('raceMap');
@@ -518,8 +517,8 @@ function vehicleModel(car){
   const t=score('topSpeed',car),g=score('grip',car),d=score('downforce',car),c=score('cornering',car),b=score('braking',car),s=score('stability',car);
   // 부품 평균으로 좁아진 점수 범위에 맞춘 게임용 감도입니다. 저장 점수는 바꾸지 않습니다.
   // 월드 좌표 1단위=1m, 내부 속도=m/s, 차량 저장값과 HUD=km/h입니다.
-  const power=(t-.45)/.5;
-  return {maxSpeed:(210+145*power)/3.6,drive:12+24*power,mu:1.1+2.8*g,
+  const power=Math.max(0,Math.min(1,(score('acceleration',car)-.75)/.25));
+  return {maxSpeed:(210+145*Math.max(0,Math.min(1,(t-.45)/.5)))/3.6,drive:12+24*power,mu:1.1+2.8*g,
     aero:.00008+.00022*d,drag:.00007+.00018*d,
     corner:.55+1.05*c,brake:10+27*b,stability:.65+.35*s};
 }
@@ -680,7 +679,7 @@ function trafficStep(dt){
   target=Math.max(-limit,Math.min(limit,target));
   if(!free(target)){target=q.l;if(c.passTarget)c.passTarget=null}
   c.targetLane=target;
-  const desired=Math.max(-3.8,Math.min(3.8,(target-q.l)*1.5));
+  const desired=Math.max(-3.8,Math.min(3.8,(target-q.l)*(1+score('stability',c))));
   const old=q.lv,latAccel=Math.min(3.5,lateralCapacity(m,q.v)*.18);
   let lv=old+Math.max(-latAccel*dt,Math.min(latAccel*dt,desired-old));
   let lateral=q.l+lv*dt;
@@ -722,7 +721,7 @@ function startCountdown(){if(phase!=='preview')return;
   // 출발 직전에 한 번만 기존 AI 객체를 만들고, 카운트다운과 레이스에 계속 사용합니다.
   ais.push(...createAICars());cars=[player,...ais];
   cars.forEach((car,i)=>{
-    car.progress=-(Math.floor(i/2)*13)/length;car.lateral=i%2?-3.2:3.2;car.targetLane=car.lateral;car.lateralVelocity=0;car.pathFactor=1;car.aggression=[.5,.85,.35,.7,.55][i];car.passTarget=null;
+    car.progress=-(Math.floor(i/2)*13)/length;car.lateral=i%2?-3.2:3.2;car.targetLane=car.lateral;car.lateralVelocity=0;car.pathFactor=1;car.passTarget=null;
     Object.assign(car,{laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity});initializePhysics(car);placeCar(car,i);
   });
   raceMap.hidden=false;updateMinimap();phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-27).add(new THREE.Vector3(0,19,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
