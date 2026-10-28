@@ -534,9 +534,9 @@ function acceleration(m,v,k){
 }
 function cornerLimit(m,k){
   if(k<1e-6)return m.maxSpeed;
-  let lo=0,hi=m.maxSpeed;
-  for(let j=0;j<24;j++){let v=(lo+hi)/2;if(v*v*k<=lateralCapacity(m,v))lo=v;else hi=v}
-  return Math.max(4,lo);
+  // 기존 접지력 부등식의 해석해: 반복 이분 탐색 없이 같은 속도 한계를 구합니다.
+  const base=lateralCapacity(m,0),denom=k-base*m.aero;
+  return Math.max(4,denom<=0?m.maxSpeed:Math.min(m.maxSpeed,Math.sqrt(base/denom)));
 }
 // 등거리 접선 샘플로 곡률을 구하고 역방향으로 제동 가능한 속도를 전달합니다.
 function trackCurvatures(){
@@ -559,12 +559,13 @@ function makeSpeedProfile(m){
   return speeds;
 }
 // 서킷별 1회 생성: 코너 봉우리에서 apex를 정하고 전후에 바깥쪽 경로를 연결합니다.
-let racingLine=[],lineK=[];
+let racingLine=[],lineK=[],signedK=[],lineDS=[];
 function buildRacingLine(){
  const n=PROFILE_SIZE,ds=length/n,signed=trackK.map((k,i)=>{
   const a=frameAt((i-1)/n).v,b=frameAt((i+1)/n).v;
   return Math.sign(a.z*b.x-a.x*b.z)*k;
  });
+ signedK=signed;
  racingLine=Array(n).fill(0);const weight=Array(n).fill(0),limit=Math.max(0,roadWidth/2-3.3);
  const peaks=[];
  for(let i=0;i<n;i++)if(trackK[i]>.004&&trackK[i]>=trackK[(i+n-1)%n]&&trackK[i]>trackK[(i+1)%n])peaks.push(i);
@@ -580,8 +581,14 @@ function buildRacingLine(){
   }
  }
  racingLine=racingLine.map((v,i)=>v/Math.max(1,weight[i]));
+ // 연속 코너의 연결까지 고려한 경사·굽힘 제한. 샘플 밀도와 무관한 실제 거리 기준입니다.
+ const slope=Math.min(.16,limit/25);
+ for(let pass=0;pass<4;pass++)for(let i=0;i<n;i++){
+  const j=(i+1)%n;racingLine[j]=Math.max(racingLine[i]-slope*ds,Math.min(racingLine[i]+slope*ds,racingLine[j]));
+ }
  for(let pass=0;pass<12;pass++)racingLine=racingLine.map((v,i)=>(racingLine[(i+n-1)%n]+2*v+racingLine[(i+1)%n])/4);
  const points=racingLine.map((l,i)=>{const f=frameAt(i/n);return f.p.clone().addScaledVector(f.side,l)});
+ lineDS=points.map((p,i)=>p.distanceTo(points[(i+1)%n]));
  lineK=points.map((b,i)=>{
   const a=points[(i+n-1)%n],c=points[(i+1)%n],u=b.clone().sub(a),v=c.clone().sub(b);
   return u.angleTo(v)/Math.max(.1,(u.length()+v.length())*.5);
@@ -590,11 +597,15 @@ function buildRacingLine(){
 function lineAt(progress){const x=(((progress%1)+1)%1)*PROFILE_SIZE,i=Math.floor(x),f=x-i;return racingLine[i]*(1-f)+racingLine[(i+1)%PROFILE_SIZE]*f}
 function initializePhysics(car){
  if(!racingLine.length)buildRacingLine();
- car.model=vehicleModel(car);car.speedProfile=makeSpeedProfile(car.model);
- // 기존 성능과 제동 역전파를 유지하면서 실제 레이싱 라인의 곡률도 반영합니다.
- const ds=length/PROFILE_SIZE;
- car.speedProfile=car.speedProfile.map((v,i)=>Math.min(v,cornerLimit(car.model,lineK[i])));
- for(let pass=0;pass<6;pass++)for(let i=PROFILE_SIZE-1;i>=0;i--){const next=car.speedProfile[(i+1)%PROFILE_SIZE];car.speedProfile[i]=Math.min(car.speedProfile[i],Math.sqrt(next*next+2*brakeCapacity(car.model,next)*ds))}
+ car.model=vehicleModel(car);
+ // 선택한 실제 경로의 곡률과 구간 길이로 차량별 제동 계획을 생성합니다.
+ car.speedProfile=lineK.map(k=>cornerLimit(car.model,k));
+ for(let pass=0;pass<6;pass++)for(let i=PROFILE_SIZE-1;i>=0;i--){
+  const next=car.speedProfile[(i+1)%PROFILE_SIZE];
+  car.speedProfile[i]=Math.min(car.speedProfile[i],Math.sqrt(next*next+2*brakeCapacity(car.model,next)*lineDS[i]));
+ }
+ car.controlK=0;car.lineCap=Infinity;
+
 }
 
 function updateCar(car,dt,endTime,index){
@@ -607,11 +618,11 @@ function updateCar(car,dt,endTime,index){
   if(!car.model)initializePhysics(car);
   const m=car.model,wrapped=((car.progress%1)+1)%1;
   const sample=wrapped*PROFILE_SIZE,i=Math.floor(sample)%PROFILE_SIZE,f=sample-Math.floor(sample);
-  const target=car.speedProfile[i]*(1-f)+car.speedProfile[(i+1)%PROFILE_SIZE]*f;
+  const target=Math.min(car.speedProfile[i]*(1-f)+car.speedProfile[(i+1)%PROFILE_SIZE]*f,car.lineCap??Infinity);
   const v=Math.max(0,Number.isFinite(car.speed)?car.speed/3.6:0);
   let next;
   if(v>target)next=Math.max(target,v-brakeCapacity(m,v)*dt);
-  else next=Math.min(target,Math.max(0,v+acceleration(m,v,trackK[i])*dt));
+  else next=Math.min(target,Math.max(0,v+acceleration(m,v,Math.max(lineK[i],car.controlK||0))*dt));
   next=Math.max(0,Math.min(m.maxSpeed,Number.isFinite(next)?next:0));
   if(Number.isFinite(car.trafficCap)){
     const decel=car.emergency?brakeCapacity(m,v):Math.min(brakeCapacity(m,v),5.5);
@@ -640,7 +651,7 @@ function changeCircuit(key){
   trackWaypoints=createWaypoints();curve=new THREE.CatmullRomCurve3(trackWaypoints,true,'centripetal');
   curve.arcLengthDivisions=4096;curve.updateArcLengths();length=curve.getLength();roadWidth=Math.max(18,DATA.circuit.width);
   const previous=new Set(scene.children);createTrack();trackObjects=scene.children.filter(o=>!previous.has(o));
-  rebuildMap();mapSvg.innerHTML=svg.innerHTML;mapMarkers.length=0;trackK=trackCurvatures();racingLine=[];lineK=[];
+  rebuildMap();mapSvg.innerHTML=svg.innerHTML;mapMarkers.length=0;trackK=trackCurvatures();racingLine=[];lineK=[];signedK=[];lineDS=[];
   player.progress=0;player.model=null;player.speedProfile=null;placeCar(player,0);
   document.querySelector('#trackPanel .previewTitle').textContent=DATA.circuit.name;
   document.querySelectorAll('[data-circuit]').forEach(b=>{const active=b.dataset.circuit===key;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
@@ -669,22 +680,60 @@ function trafficStep(dt){
   };
   let ahead=null,gap=Infinity;
   for(const r of neighbors){const d=gapTo(r);if(d>0&&d<gap&&Math.abs(r.l-q.l)<width){ahead=r;gap=d}}
-  let target=lineAt(c.progress+Math.max(5,q.v*.22)/length);
-  if(c.passTarget){const r=snap.find(r=>r.c===c.passTarget);if(!r||gapTo(r)<-14){c.passTarget=null}else target=c.targetLane}
-  if(ahead&&!c.passTarget&&!c.finished&&gap<40+q.v*.4&&q.v-ahead.v>.5&&k<.04){
-   const choices=[-limit,limit].sort((a,b)=>Math.abs(a-q.l)-Math.abs(b-q.l));
-   const lane=choices.find(l=>Math.abs(l-ahead.l)>width&&free(l));
-   if(lane!==undefined){target=lane;c.passTarget=ahead.c}
+  const preview=Math.max(8,Math.min(35,q.v*.55));
+  let target=lineAt(c.progress+preview/length);
+  if(c.passTarget){
+   const r=snap.find(r=>r.c===c.passTarget);
+   c.passAge=(c.passAge||0)+dt;
+   if(!r||gapTo(r)<-14||gapTo(r)>95||c.passAge>9){c.passTarget=null;c.passAge=0}
+   else target=c.targetLane;
+  }
+  if(ahead&&!c.passTarget&&!c.finished&&gap<40+q.v*.65){
+   // 공통 물리로 단기 속도를 예측합니다. 제동 우위만으로 추월을 확정하지 않습니다.
+   const horizon=1.5,j=(i+Math.max(1,Math.round(q.v*horizon/length*PROFILE_SIZE)))%PROFILE_SIZE;
+   const mine=Math.min(c.speedProfile[j],q.v+Math.max(0,acceleration(m,q.v,lineK[i]))*horizon);
+   const theirModel=ahead.c.model;
+   const ri=Math.floor(((((ahead.c.progress+ahead.v*horizon/length)%1)+1)%1)*PROFILE_SIZE)%PROFILE_SIZE;
+   const their=Math.min(ahead.c.speedProfile[ri],ahead.v+Math.max(0,acceleration(theirModel,ahead.v,lineK[ri]))*horizon);
+   const bend=signedK[j],braking=q.v>c.speedProfile[j]+2;
+   const brakeGain=braking?Math.max(0,(q.v*q.v-c.speedProfile[j]*c.speedProfile[j])*.5*(1/brakeCapacity(theirModel,q.v)-1/brakeCapacity(m,q.v))):0;
+   if(q.v-ahead.v>.5||mine-their>1||brakeGain>3){
+    const choices=[-limit,limit].map(l=>{
+     const kk=Math.abs(trackK[j]/Math.max(.55,1-bend*l));
+     const feasible=cornerLimit(m,kk);
+     const reach=Math.sqrt(feasible*feasible+2*brakeCapacity(m,q.v)*Math.max(1,q.v*horizon));
+     return {l,cost:Math.abs(l-q.l)*.3+Math.max(0,mine-feasible)*2+(braking&&l*bend<0?2:0),safe:q.v<=reach+.5};
+    }).sort((a,b)=>a.cost-b.cost);
+    const lane=choices.find(x=>x.safe&&Math.abs(x.l-ahead.l)>width&&free(x.l));
+    if(lane){target=lane.l;c.passTarget=ahead.c;c.passAge=0}
+   }
   }
   target=Math.max(-limit,Math.min(limit,target));
   if(!free(target)){target=q.l;if(c.passTarget)c.passTarget=null}
   c.targetLane=target;
-  const desired=Math.max(-3.8,Math.min(3.8,(target-q.l)*(1+score('stability',c))));
-  const old=q.lv,latAccel=Math.min(3.5,lateralCapacity(m,q.v)*.18);
+  // 목표 경로의 방향과 위치 오차를 함께 추종하고, 남은 접지력 안에서 조향합니다.
+  const look=Math.max(8,q.v*.55),futureLine=lineAt(c.progress+(look+4)/length);
+  const slope=c.passTarget?0:(futureLine-lineAt(c.progress+look/length))/4;
+  const desired=Math.max(-3.8,Math.min(3.8,q.v*slope+(target-q.l)*(1+score('stability',c))));
+  const old=q.lv,capacity=lateralCapacity(m,q.v),baseK=Math.abs(k/Math.max(.6,1-signedK[i]*q.l));
+  const remaining=Math.max(.25,capacity-q.v*q.v*baseK);
+  const latAccel=Math.min(3.5,remaining)*m.stability;
   let lv=old+Math.max(-latAccel*dt,Math.min(latAccel*dt,desired-old));
   let lateral=q.l+lv*dt;
   if((target-q.l)*(target-lateral)<0){lateral=target;lv=0}
-  c.lateral=Math.max(-limit,Math.min(limit,lateral));c.lateralVelocity=lv;
+  lateral=Math.max(-limit,Math.min(limit,lateral));
+  // 차선이 막혔을 때 남아 있는 횡속도로 그 안에 진입하지 않도록 실제 다음 위치도 검사합니다.
+  if(!free(lateral)&&Math.abs(lateral-q.l)>1e-7){lateral=q.l;lv=0}
+  c.lateral=lateral;c.lateralVelocity=lv;
+  const changeK=Math.abs(lv-old)/dt/Math.max(16,q.v*q.v);
+  c.controlK=baseK+changeK;
+  c.lineCap=cornerLimit(m,c.controlK);
+  // 추월 중 평행 경로의 미래 곡률도 확인하여 제동 구간 진입을 제한합니다.
+  if(c.passTarget)for(const aheadM of [12,28,55,90]){
+   const j=(i+Math.round(aheadM/length*PROFILE_SIZE))%PROFILE_SIZE;
+   const kk=trackK[j]/Math.max(.6,1-signedK[j]*c.lateral),vCorner=cornerLimit(m,kk);
+   c.lineCap=Math.min(c.lineCap,Math.sqrt(vCorner*vCorner+2*brakeCapacity(m,q.v)*aheadM));
+  }
   reservations.push({s:q.s,l:c.lateral+lv*.6});
   // 차폭과 상대 속도로 추종합니다. 앞차의 이동을 무시하는 거리/dt 제한은 사용하지 않습니다.
   if(ahead&&Math.abs(c.lateral-ahead.l)<width){
@@ -697,7 +746,7 @@ function trafficStep(dt){
    }
   }
   // 평행 경로의 길이와 횡방향 이동을 실제 진행 거리 계산에 반영합니다.
-  const a=frameAt(c.progress-.001).v,b=frameAt(c.progress+.001).v,sign=Math.sign(a.z*b.x-a.x*b.z);
+  const sign=Math.sign(signedK[i]);
   c.pathFactor=Math.sqrt(Math.pow(Math.max(.6,1-sign*k*c.lateral),2)+Math.pow(lv/Math.max(2,q.v),2));
  }
 }
