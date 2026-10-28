@@ -502,8 +502,12 @@ function updateMinimap(){
 }
 
 // 차량은 출발선 근처 5열 그리드에 놓되, 선수차는 정확히 출발선 위에 둡니다.
-function placeCar(car,index){
- const f=frameAt(car.progress),offset=car.lateral||0;
+function placeCar(car,index,alpha=1){
+ const current=(car.laps+car.progress)*length,previous=car.renderPrevious;
+ const interpolate=previous&&alpha<1;
+ const progress=interpolate?(previous.s+(current-previous.s)*alpha)/length:car.progress;
+ const offset=interpolate?previous.l+((car.lateral||0)-previous.l)*alpha:(car.lateral||0);
+ const f=frameAt(progress);
  car.mesh.position.copy(f.p).addScaledVector(f.side,offset);car.mesh.position.y=1.20;
  // 횡방향 속도를 차체 진행 방향에 반영합니다.
  const heading=f.v.clone().multiplyScalar(Math.max(2,car.speed/3.6)).addScaledVector(f.side,car.lateralVelocity||0);
@@ -518,12 +522,12 @@ function vehicleModel(car){
   // 부품 평균으로 좁아진 점수 범위에 맞춘 게임용 감도입니다. 저장 점수는 바꾸지 않습니다.
   // 월드 좌표 1단위=1m, 내부 속도=m/s, 차량 저장값과 HUD=km/h입니다.
   const power=Math.max(0,Math.min(1,(score('acceleration',car)-.75)/.25));
-  return {maxSpeed:(210+145*Math.max(0,Math.min(1,(t-.45)/.5)))/3.6,drive:12+24*power,mu:1.1+2.8*g,
-    aero:.00008+.00022*d,drag:.00007+.00018*d,
-    corner:.55+1.05*c,brake:10+27*b,stability:.65+.35*s};
+  return {maxSpeed:(210+145*Math.max(0,Math.min(1,(t-.45)/.5)))/3.6,drive:12+24*power,mu:1.0+1.4*g,
+    aero:.000025+.000065*d,drag:.00007+.00018*d,
+    corner:.5+.8*c,brake:10+27*b,stability:.65+.35*s};
 }
 // 짧은 기존 트랙을 위한 공통 아케이드 코너 접지 배율입니다. 특정 차량 보정이 아닙니다.
-function lateralCapacity(m,v){return 2.4*m.mu*9.81*(1+m.aero*v*v)*m.corner*m.stability}
+function lateralCapacity(m,v){return m.mu*9.81*(1+Math.min(1.4,m.aero*v*v))*m.corner*m.stability}
 function brakeCapacity(m,v){return Math.min(m.brake,m.mu*9.81*(1+m.aero*v*v))*m.stability}
 function acceleration(m,v,k){
   const used=Math.min(1,v*v*k/Math.max(.1,lateralCapacity(m,v)));
@@ -534,9 +538,11 @@ function acceleration(m,v,k){
 }
 function cornerLimit(m,k){
   if(k<1e-6)return m.maxSpeed;
-  // 기존 접지력 부등식의 해석해: 반복 이분 탐색 없이 같은 속도 한계를 구합니다.
   const base=lateralCapacity(m,0),denom=k-base*m.aero;
-  return Math.max(4,denom<=0?m.maxSpeed:Math.min(m.maxSpeed,Math.sqrt(base/denom)));
+  // 공력 접지 증가에 상한을 두어 큰 속도에서 곡률 제한이 사라지는 것을 방지합니다.
+  const uncapped=denom>0?Math.sqrt(base/denom):Infinity;
+  const capped=Math.sqrt(base*2.4/k);
+  return Math.max(4,Math.min(m.maxSpeed,uncapped,capped));
 }
 // 등거리 접선 샘플로 곡률을 구하고 역방향으로 제동 가능한 속도를 전달합니다.
 function trackCurvatures(){
@@ -559,7 +565,7 @@ function makeSpeedProfile(m){
   return speeds;
 }
 // 서킷별 1회 생성: 코너 봉우리에서 apex를 정하고 전후에 바깥쪽 경로를 연결합니다.
-let racingLine=[],lineK=[],signedK=[],lineDS=[];
+let racingLine=[],lineK=[],signedK=[],lineDS=[],routeGeometry=null;
 function buildRacingLine(){
  const n=PROFILE_SIZE,ds=length/n,signed=trackK.map((k,i)=>{
   const a=frameAt((i-1)/n).v,b=frameAt((i+1)/n).v;
@@ -595,6 +601,53 @@ function buildRacingLine(){
  });
 }
 function lineAt(progress){const x=(((progress%1)+1)%1)*PROFILE_SIZE,i=Math.floor(x),f=x-i;return racingLine[i]*(1-f)+racingLine[(i+1)%PROFILE_SIZE]*f}
+
+// 기본 라인을 보존하며 진입/정점/출구를 함께 바꾸는 세 가지 폭 후보를 비교합니다.
+function prepareRoutes(car){
+ const n=PROFILE_SIZE;
+ if(!routeGeometry){
+  const limit=Math.max(0,roadWidth/2-3.3);
+  routeGeometry=[.55,1,1.3].map(scale=>{
+   const offsets=racingLine.map(l=>Math.max(-limit,Math.min(limit,l*scale)));
+   const points=offsets.map((l,i)=>{const f=frameAt(i/n);return f.p.clone().addScaledVector(f.side,l)});
+   const ds=points.map((p,i)=>p.distanceTo(points[(i+1)%n]));
+   const k=points.map((p,i)=>{const u=p.clone().sub(points[(i+n-1)%n]),v=points[(i+1)%n].clone().sub(p);return u.angleTo(v)/Math.max(.1,(u.length()+v.length())*.5)});
+   return {offsets,ds,k};
+  });
+ }
+ car.routes=routeGeometry.map(g=>{
+  const speeds=g.k.map(k=>cornerLimit(car.model,k));
+  for(let pass=0;pass<5;pass++)for(let i=n-1;i>=0;i--){const v=speeds[(i+1)%n];speeds[i]=Math.min(speeds[i],Math.sqrt(v*v+2*brakeCapacity(car.model,v)*g.ds[i]))}
+  return {...g,speeds};
+ });
+ car.routeIndex=1;car.routeClock=0;
+}
+function routeAt(car,p){
+ const r=car.routes?.[car.routeIndex];if(!r)return lineAt(p);
+ const x=(((p%1)+1)%1)*PROFILE_SIZE,i=Math.floor(x),f=x-i;
+ return r.offsets[i]*(1-f)+r.offsets[(i+1)%PROFILE_SIZE]*f;
+}
+function chooseRoute(car,i,v,free,dt){
+ car.routeClock-=dt;if(car.routeClock>0||car.passTarget||car.finished)return;
+ car.routeClock=.45;
+ const ds=length/PROFILE_SIZE,steps=Math.min(PROFILE_SIZE/3,Math.ceil(Math.max(110,v*4)/ds));
+ const costs=car.routes.map((r,index)=>{
+  let time=0,speed=Math.max(4,v),distance=0;
+  for(let n=0;n<steps;n++){
+   const j=(i+n)%PROFILE_SIZE;distance+=r.ds[j];
+   speed=Math.min(r.speeds[j],Math.sqrt(Math.max(1,speed*speed+2*Math.max(0,acceleration(car.model,speed,r.k[j]))*r.ds[j])));
+   time+=r.ds[j]/Math.max(4,speed);
+  }
+  const near=(i+Math.ceil(Math.max(15,v*.8)/ds))%PROFILE_SIZE;
+  const shift=Math.abs(r.offsets[near]-car.lateral);
+  const reachable=shift<=.5*3*Math.pow(Math.max(.5,Math.max(15,v*.8)/Math.max(4,v)),2);
+  return reachable&&free(r.offsets[near])?time+shift*.06+(index===car.routeIndex?0:.12):Infinity;
+ });
+ const best=costs.indexOf(Math.min(...costs));
+ if(Number.isFinite(costs[best])&&costs[best]+.08<costs[car.routeIndex]){
+  car.routeIndex=best;car.speedProfile=car.routes[best].speeds;car.routeClock=1.5;
+ }
+}
 function initializePhysics(car){
  if(!racingLine.length)buildRacingLine();
  car.model=vehicleModel(car);
@@ -604,7 +657,7 @@ function initializePhysics(car){
   const next=car.speedProfile[(i+1)%PROFILE_SIZE];
   car.speedProfile[i]=Math.min(car.speedProfile[i],Math.sqrt(next*next+2*brakeCapacity(car.model,next)*lineDS[i]));
  }
- car.controlK=0;car.lineCap=Infinity;
+ prepareRoutes(car);car.speedProfile=car.routes[1].speeds;car.controlK=0;car.lineCap=Infinity;
 
 }
 
@@ -622,7 +675,7 @@ function updateCar(car,dt,endTime,index){
   const v=Math.max(0,Number.isFinite(car.speed)?car.speed/3.6:0);
   let next;
   if(v>target)next=Math.max(target,v-brakeCapacity(m,v)*dt);
-  else next=Math.min(target,Math.max(0,v+acceleration(m,v,Math.max(lineK[i],car.controlK||0))*dt));
+  else next=Math.min(target,Math.max(0,v+acceleration(m,v,Math.max(car.routes?.[car.routeIndex]?.k[i]??lineK[i],car.controlK||0))*dt));
   next=Math.max(0,Math.min(m.maxSpeed,Number.isFinite(next)?next:0));
   if(Number.isFinite(car.trafficCap)){
     const decel=car.emergency?brakeCapacity(m,v):Math.min(brakeCapacity(m,v),5.5);
@@ -651,7 +704,7 @@ function changeCircuit(key){
   trackWaypoints=createWaypoints();curve=new THREE.CatmullRomCurve3(trackWaypoints,true,'centripetal');
   curve.arcLengthDivisions=4096;curve.updateArcLengths();length=curve.getLength();roadWidth=Math.max(18,DATA.circuit.width);
   const previous=new Set(scene.children);createTrack();trackObjects=scene.children.filter(o=>!previous.has(o));
-  rebuildMap();mapSvg.innerHTML=svg.innerHTML;mapMarkers.length=0;trackK=trackCurvatures();racingLine=[];lineK=[];signedK=[];lineDS=[];
+  rebuildMap();mapSvg.innerHTML=svg.innerHTML;mapMarkers.length=0;trackK=trackCurvatures();racingLine=[];lineK=[];signedK=[];lineDS=[];routeGeometry=null;
   player.progress=0;player.model=null;player.speedProfile=null;placeCar(player,0);
   document.querySelector('#trackPanel .previewTitle').textContent=DATA.circuit.name;
   document.querySelectorAll('[data-circuit]').forEach(b=>{const active=b.dataset.circuit===key;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
@@ -680,8 +733,9 @@ function trafficStep(dt){
   };
   let ahead=null,gap=Infinity;
   for(const r of neighbors){const d=gapTo(r);if(d>0&&d<gap&&Math.abs(r.l-q.l)<width){ahead=r;gap=d}}
+  chooseRoute(c,i,q.v,free,dt);
   const preview=Math.max(8,Math.min(35,q.v*.55));
-  let target=lineAt(c.progress+preview/length);
+  let target=routeAt(c,c.progress+preview/length);
   if(c.passTarget){
    const r=snap.find(r=>r.c===c.passTarget);
    c.passAge=(c.passAge||0)+dt;
@@ -712,8 +766,8 @@ function trafficStep(dt){
   if(!free(target)){target=q.l;if(c.passTarget)c.passTarget=null}
   c.targetLane=target;
   // 목표 경로의 방향과 위치 오차를 함께 추종하고, 남은 접지력 안에서 조향합니다.
-  const look=Math.max(8,q.v*.55),futureLine=lineAt(c.progress+(look+4)/length);
-  const slope=c.passTarget?0:(futureLine-lineAt(c.progress+look/length))/4;
+  const look=Math.max(8,q.v*.55),futureLine=routeAt(c,c.progress+(look+4)/length);
+  const slope=c.passTarget?0:(futureLine-routeAt(c,c.progress+look/length))/4;
   const desired=Math.max(-3.8,Math.min(3.8,q.v*slope+(target-q.l)*(1+score('stability',c))));
   const old=q.lv,capacity=lateralCapacity(m,q.v),baseK=Math.abs(k/Math.max(.6,1-signedK[i]*q.l));
   const remaining=Math.max(.25,capacity-q.v*q.v*baseK);
@@ -728,8 +782,8 @@ function trafficStep(dt){
   const changeK=Math.abs(lv-old)/dt/Math.max(16,q.v*q.v);
   c.controlK=baseK+changeK;
   c.lineCap=cornerLimit(m,c.controlK);
-  // 추월 중 평행 경로의 미래 곡률도 확인하여 제동 구간 진입을 제한합니다.
-  if(c.passTarget)for(const aheadM of [12,28,55,90]){
+  // 추월/경로 전환 중에는 현재 평행 경로의 미래 곡률도 확인합니다.
+  if(c.passTarget||Math.abs(q.l-routeAt(c,c.progress))>1)for(const aheadM of [12,28,55,90,150,230]){
    const j=(i+Math.round(aheadM/length*PROFILE_SIZE))%PROFILE_SIZE;
    const kk=trackK[j]/Math.max(.6,1-signedK[j]*c.lateral),vCorner=cornerLimit(m,kk);
    c.lineCap=Math.min(c.lineCap,Math.sqrt(vCorner*vCorner+2*brakeCapacity(m,q.v)*aheadM));
@@ -750,7 +804,7 @@ function trafficStep(dt){
   c.pathFactor=Math.sqrt(Math.pow(Math.max(.6,1-sign*k*c.lateral),2)+Math.pow(lv/Math.max(2,q.v),2));
  }
 }
-function raceStep(dt,time){trafficStep(dt);updatePlayerCar(dt,time);updateAICars(dt,time)}
+function raceStep(dt,time){cars.forEach(c=>{c.renderPrevious={s:(c.laps+c.progress)*length,l:c.lateral||0}});trafficStep(dt);updatePlayerCar(dt,time);updateAICars(dt,time)}
 
 function updatePlayerCar(dt,elapsed){updateCar(player,dt,elapsed,0)}
 function updateAICars(dt,elapsed){ais.forEach((car,i)=>updateCar(car,dt,elapsed,i+1))}
@@ -770,7 +824,7 @@ function startCountdown(){if(phase!=='preview')return;
   // 출발 직전에 한 번만 기존 AI 객체를 만들고, 카운트다운과 레이스에 계속 사용합니다.
   ais.push(...createAICars());cars=[player,...ais];
   cars.forEach((car,i)=>{
-    car.progress=-(Math.floor(i/2)*13)/length;car.lateral=i%2?-3.2:3.2;car.targetLane=car.lateral;car.lateralVelocity=0;car.pathFactor=1;car.passTarget=null;
+    car.progress=-(Math.floor(i/2)*13)/length;car.lateral=i%2?-3.2:3.2;car.targetLane=car.lateral;car.lateralVelocity=0;car.pathFactor=1;car.passTarget=null;car.renderPrevious=null;
     Object.assign(car,{laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,best:Infinity,finishTime:Infinity});initializePhysics(car);placeCar(car,i);
   });
   raceMap.hidden=false;updateMinimap();phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-27).add(new THREE.Vector3(0,19,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
@@ -846,7 +900,7 @@ function animate(now){requestAnimationFrame(animate);const dt=Math.max(0,Math.mi
       physicsAccumulator-=PHYSICS_STEP;
       if(player.finished&&ais.every(car=>car.finished)){physicsAccumulator=0;finishSimulation();break}
     }
-    cars.forEach((car,i)=>{placeCar(car,i);if(!car.finished&&car.mesh.userData.rotateWheels)car.mesh.userData.rotateWheels(car.speed*dt*.06)});
+    cars.forEach((car,i)=>{placeCar(car,i,phase==='complete'?1:Math.max(0,Math.min(1,physicsAccumulator/PHYSICS_STEP)));if(!car.finished&&car.mesh.userData.rotateWheels)car.mesh.userData.rotateWheels(car.speed*dt*.06)});
     updateCamera(dt);updateHUD();updateMinimap();
   }
   if(phase==='skipping')return;
