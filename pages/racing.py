@@ -657,7 +657,7 @@ function initializePhysics(car){
   const next=car.speedProfile[(i+1)%PROFILE_SIZE];
   car.speedProfile[i]=Math.min(car.speedProfile[i],Math.sqrt(next*next+2*brakeCapacity(car.model,next)*lineDS[i]));
  }
- prepareRoutes(car);car.speedProfile=car.routes[1].speeds;car.controlK=0;car.lineCap=Infinity;
+ prepareRoutes(car);car.speedProfile=car.routes[1].speeds;car.controlK=0;car.lineCap=Infinity;car.longitudinalA=0;
 
 }
 
@@ -673,14 +673,25 @@ function updateCar(car,dt,endTime,index){
   const sample=wrapped*PROFILE_SIZE,i=Math.floor(sample)%PROFILE_SIZE,f=sample-Math.floor(sample);
   const target=Math.min(car.speedProfile[i]*(1-f)+car.speedProfile[(i+1)%PROFILE_SIZE]*f,car.lineCap??Infinity);
   const v=Math.max(0,Number.isFinite(car.speed)?car.speed/3.6:0);
-  let next;
-  if(v>target)next=Math.max(target,v-brakeCapacity(m,v)*dt);
-  else next=Math.min(target,Math.max(0,v+acceleration(m,v,Math.max(car.routes?.[car.routeIndex]?.k[i]??lineK[i],car.controlK||0))*dt));
-  next=Math.max(0,Math.min(m.maxSpeed,Number.isFinite(next)?next:0));
-  if(Number.isFinite(car.trafficCap)){
-    const decel=car.emergency?brakeCapacity(m,v):Math.min(brakeCapacity(m,v),5.5);
-    next=Math.min(next,Math.max(car.trafficCap,v-decel*dt));
+  // 공간 속도 계획의 기울기는 필요한 종가속도(v² 변화/2ds)입니다.
+  // 매 프레임 최대 제동/가속을 번갈아 명령하지 않고 같은 계획을 추종합니다.
+  const route=car.routes[car.routeIndex],j=(i+1)%PROFILE_SIZE;
+  const planA=(route.speeds[j]**2-route.speeds[i]**2)/(2*Math.max(.1,route.ds[i]));
+  const pathK=car.controlK||route.k[i];
+  const drive=acceleration(m,v,pathK),brake=brakeCapacity(m,v);
+  const correction=(target-v)*2;
+  let command=Math.max(-brake,Math.min(drive,planA+correction));
+  car.drivePhase=planA<-.35?'entry':planA>.35?'exit':pathK>.003?'corner':'straight';
+  // 통합된 종방향 명령: 추종은 안전 속도를 넘을 때만 개입합니다.
+  if(Number.isFinite(car.trafficCap)&&v>car.trafficCap){
+    const trafficA=(car.trafficCap-v)/Math.max(.18,car.emergency?.18:.8);
+    command=Math.min(command,Math.max(-brake,trafficA));
   }
+  // 비상 위험은 즉시, 일반 명령은 유한한 jerk로 연결합니다.
+  const previous=Number.isFinite(car.longitudinalA)?car.longitudinalA:command;
+  const applied=car.emergency?command:previous+Math.max(-60*dt,Math.min(35*dt,command-previous));
+  car.longitudinalA=Math.max(-brake,Math.min(drive,applied));
+  let next=Math.max(0,Math.min(m.maxSpeed,v+car.longitudinalA*dt));
   // 중심선 거리와 실제 횡방향 주행 거리를 구분합니다.
   const factor=Math.max(.6,car.pathFactor||1);
   const distance=(v+next)*.5*dt/factor,remaining=(1-car.progress)*length;
@@ -779,8 +790,11 @@ function trafficStep(dt){
   // 차선이 막혔을 때 남아 있는 횡속도로 그 안에 진입하지 않도록 실제 다음 위치도 검사합니다.
   if(!free(lateral)&&Math.abs(lateral-q.l)>1e-7){lateral=q.l;lv=0}
   c.lateral=lateral;c.lateralVelocity=lv;
-  const changeK=Math.abs(lv-old)/dt/Math.max(16,q.v*q.v);
-  c.controlK=baseK+changeK;
+  // 측정 횡가속의 부호를 보존합니다. 반대 방향 조향까지 더해 곡률을 부풀리지 않습니다.
+  const signedActual=signedK[i]/Math.max(.6,1-signedK[i]*q.l)+(lv-old)/dt/Math.max(16,q.v*q.v);
+  const planned=c.routes[c.routeIndex].k[i];
+  const aligned=!c.passTarget&&Math.abs(q.l-routeAt(c,c.progress))<1;
+  c.controlK=aligned?planned:Math.abs(signedActual);
   c.lineCap=cornerLimit(m,c.controlK);
   // 추월/경로 전환 중에는 현재 평행 경로의 미래 곡률도 확인합니다.
   if(c.passTarget||Math.abs(q.l-routeAt(c,c.progress))>1)for(const aheadM of [12,28,55,90,150,230]){
@@ -791,13 +805,14 @@ function trafficStep(dt){
   reservations.push({s:q.s,l:c.lateral+lv*.6});
   // 차폭과 상대 속도로 추종합니다. 앞차의 이동을 무시하는 거리/dt 제한은 사용하지 않습니다.
   if(ahead&&Math.abs(c.lateral-ahead.l)<width){
-   const closing=Math.max(0,q.v-ahead.v),room=Math.max(.1,gap-9.5);
-   const desiredGap=10.5+q.v*.16+closing*.45,ttc=room/Math.max(.1,closing);
-   if(gap<desiredGap||ttc<2.2){
-    c.trafficCap=Math.max(0,ahead.v+(gap-desiredGap)*.65);
-    c.emergency=ttc<.65||gap<9.5;
-    if(c.emergency)c.trafficCap=Math.min(c.trafficCap,Math.sqrt(Math.max(0,ahead.v*ahead.v+2*brakeCapacity(m,q.v)*room)));
-   }
+   const closing=Math.max(0,q.v-ahead.v),room=Math.max(.05,gap-9.5);
+   const response=.25,ownBrake=brakeCapacity(m,q.v),leadBrake=brakeCapacity(ahead.c.model,ahead.v);
+   // 앞차 이동과 두 차량의 제동거리를 함께 고려하는 안전 속도.
+   const safe=Math.max(0,-ownBrake*response+Math.sqrt((ownBrake*response)**2+2*ownBrake*(room+ahead.v*ahead.v/(2*leadBrake))));
+   const ttc=room/Math.max(.01,closing);
+   c.emergency=gap<9.5||ttc<.65;
+   if(safe<q.v||c.emergency)c.trafficCap=safe;
+
   }
   // 평행 경로의 길이와 횡방향 이동을 실제 진행 거리 계산에 반영합니다.
   const sign=Math.sign(signedK[i]);
