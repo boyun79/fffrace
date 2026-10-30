@@ -104,7 +104,7 @@ CIRCUITS = {'monaco': {'name': 'Monaco Circuit', 'width': 10, 'points': [[-170, 
 
 def build_simulation_html(car_data, opponents):
     """준비 화면부터 결과까지 하나의 iframe에서 실행하여 rerun에 따른 중단을 방지합니다."""
-    data = {"circuit": CIRCUITS[st.session_state.get("f1_active_circuit", "monaco")], "car": car_data, "laps": TOTAL_LAPS, "circuits": CIRCUITS, "circuitKey": st.session_state.get("f1_active_circuit", "monaco"), "opponents": [dict(prepare_car_data(c["config"], c["performance"]), id=c["id"]) for c in opponents]}
+    data = {"circuit": CIRCUITS[st.session_state.get("f1_active_circuit", "monaco")], "car": car_data, "laps": TOTAL_LAPS, "circuits": CIRCUITS, "circuitKey": st.session_state.get("f1_active_circuit", "monaco"), "difficulty": st.session_state.get("f1_grid_level", "challenger"), "opponents": [dict(prepare_car_data(c["config"], c["performance"]), id=c["id"]) for c in opponents]}
     # </script> 삽입을 막고 기존 Garage 값의 JSON 구조는 그대로 유지합니다.
     payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
     # Garage의 .perf 카드 구조를 재사용합니다. 변화량은 저장되지 않으므로 표시하지 않습니다.
@@ -161,6 +161,15 @@ def garage_rules():
 
 
 OPPONENT_KEY = "f1_opponent_roster_v1"
+GRID_LEVELS = {"rookie": "루키 그리드", "challenger": "챌린저 그리드", "elite": "엘리트 그리드"}
+
+def race_locked():
+    token = st.session_state.get("f1_component_token", "")
+    value = st.session_state.get("f1_racing_" + token)
+    if isinstance(value, dict) and value.get("phase") in {"preview", "countdown", "running", "skipping", "complete"}:
+        st.session_state["f1_race_phase"] = value["phase"]
+    return st.session_state.get("f1_race_phase", "preview") in {"countdown", "running", "skipping"}
+
 
 
 def generate_opponents(parts, calculator, player_config, previous=None):
@@ -172,9 +181,18 @@ def generate_opponents(parts, calculator, player_config, previous=None):
     forbidden = {fingerprint(player_config)}
     forbidden.update(fingerprint(c["config"]) for c in (previous or []))
     roster = []
+    # 실제 부품 조합 후보 중 플레이어와 전체 성능이 가까운 조합을 우선 선택합니다.
+    # 저장 점수와 물리는 그대로 두며, 특정 성능 하나만 맞추지 않습니다.
+    pool = []
+    for _ in range(600):
+        candidate = {k: rng.choice(list(parts[k]["options"])) for k in keys}
+        perf = calculator(parts, candidate)
+        distance = sum((float(perf[k])-float(player_performance[k]))**2 for k in player_performance)
+        pool.append((distance, candidate))
+    pool.sort(key=lambda item: item[0])
     for i in range(4):
         for attempt in range(10000):
-            config = {k: rng.choice(list(parts[k]["options"])) for k in keys}
+            config = dict(pool[attempt][1]) if attempt < len(pool) else {k: rng.choice(list(parts[k]["options"])) for k in keys}
             signature = fingerprint(config)
             # 외형뿐 아니라 성능 점수도 서로 다른 조합을 선택합니다.
             performance = calculator(parts, config)
@@ -203,23 +221,51 @@ def opponent_preparation(player_config):
         st.stop()
     detail_key = "f1_opponent_detail_view_v2"
     details = st.session_state.get(detail_key, False)
-    # 기존 경주 iframe 내부의 실행 상태를 Python에서 추측하지 않습니다.
-    # 외부 버튼은 경주 종료 후 준비 화면에서만 사용하도록 명확하게 안내합니다.
-    st.caption("상대 확인·변경은 경주 시작 전이나 종료 후에 사용해 주세요. 주행 중 누르면 현재 경주는 초기화되며, 변경한 조합은 새 경주에 적용됩니다.")
+    locked = race_locked()
+    level = st.session_state.setdefault("f1_grid_level", "challenger")
+    st.caption("현재 난이도 · " + GRID_LEVELS[level] + " | 상대 설정은 경주 시작 전 또는 종료 후 변경할 수 있습니다.")
     back_col, change_col = st.columns(2)
     with back_col:
         if st.button("🏁 레이싱 준비 화면으로 돌아가기" if details else "🔎 상대 차량 확인",
                      key="f1_opponent_view_toggle_v2", use_container_width=True):
-            st.session_state[detail_key] = not details
-            st.rerun()
+            if locked:
+                st.info("레이스 진행 중에는 상대 차량을 변경할 수 없습니다. 레이스를 종료한 후 다시 시도해 주세요.")
+            else:
+                st.session_state[detail_key] = not details
+                st.rerun()
     with change_col:
         if st.button("🔄 상대 차량 바꾸기", key="f1_opponent_change_v2", use_container_width=True):
-            try:
-                st.session_state[OPPONENT_KEY] = generate_opponents(
-                    parts, calculator, player_config, st.session_state[OPPONENT_KEY])
-                st.success("모든 상대 차량 조합을 변경했습니다. 새 경주부터 적용됩니다.")
-            except RuntimeError:
-                st.warning("상대 차량을 변경하지 못했습니다. 기존 조합을 유지합니다.")
+            if locked:
+                st.info("레이스 진행 중에는 상대 차량을 변경할 수 없습니다. 레이스를 종료한 후 다시 시도해 주세요.")
+            else:
+                st.session_state["f1_grid_settings_open"] = not st.session_state.get("f1_grid_settings_open", False)
+    if st.session_state.get("f1_grid_settings_open", False) and not locked:
+        with st.container(border=True):
+            st.markdown("#### AI GRID · 상대 차량 및 난이도")
+            choice = st.radio("경쟁 수준", list(GRID_LEVELS), format_func=lambda k: GRID_LEVELS[k],
+                              index=list(GRID_LEVELS).index(level), horizontal=True, key="f1_grid_draft")
+            descriptions = {"rookie": "접지력과 구동력을 여유 있게 사용하고 확실한 속도 우위에서 추월합니다.",
+                            "challenger": "차량 능력을 적극적으로 활용하는 기본 경쟁 수준입니다.",
+                            "elite": "동일한 물리 한계 안에서 접지력·구동력을 최대한 활용하고 작은 추월 기회도 검토합니다."}
+            st.caption(descriptions[choice])
+            st.caption("적용하면 네 대의 실제 부품 조합을 새로 선택합니다. 우승이나 동일한 랩타임을 보장하지 않습니다.")
+            if st.button("선택한 그리드 적용 · 상대 차량 재구성", key="f1_grid_apply", use_container_width=True):
+                if race_locked():
+                    st.info("레이스 진행 중에는 상대 차량을 변경할 수 없습니다. 레이스를 종료한 후 다시 시도해 주세요.")
+                else:
+                    try:
+                        roster_new = generate_opponents(parts, calculator, player_config, st.session_state[OPPONENT_KEY])
+                        st.session_state[OPPONENT_KEY] = roster_new
+                        st.session_state["f1_grid_level"] = choice
+                        st.session_state["f1_grid_settings_open"] = False
+                        st.session_state["f1_race_phase"] = "preview"
+                        # 명시적인 설정 적용 때만 새 iframe을 만듭니다. 경기 중 rerun은 같은 key를 유지합니다.
+                        import uuid
+                        st.session_state["f1_component_token"] = uuid.uuid4().hex
+                        st.session_state.pop("f1_component_folder", None)
+                        st.rerun()
+                    except RuntimeError:
+                        st.warning("상대 차량을 변경하지 못했습니다. 기존 조합과 난이도를 유지합니다.")
     roster = st.session_state[OPPONENT_KEY]
     # 재실행 시 조합은 그대로 두고, 저장 성능이 부품과 어긋나면 바로잡습니다.
     # 무작위 재생성은 최초 생성과 명시적인 변경 버튼에서만 수행합니다.
@@ -309,6 +355,8 @@ def render_racing_component(document):
         return
     current = st.session_state.get("f1_active_circuit", "monaco")
     selected = component(key="f1_racing_" + token, default=None)
+    if isinstance(selected, dict) and selected.get("phase") in {"preview", "countdown", "running", "skipping", "complete"}:
+        st.session_state["f1_race_phase"] = selected["phase"]
     if isinstance(selected, str) and selected in CIRCUITS and selected != current:
         st.session_state["f1_active_circuit"] = selected
 
@@ -400,6 +448,7 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 /* 독립된 LAP 진행 카드와 작은 기록 패널: 공통 외곽 카드는 사용하지 않습니다. */
 #lapHud{position:absolute;top:12px;right:12px;display:flex;align-items:flex-start;justify-content:flex-end;gap:8px;max-width:calc(100% - 218px)}
 #lapHud .panel.lap{position:static;flex:0 0 auto;max-width:none;min-width:76px;padding:8px 12px;text-align:center}
+#lapHud .lap-label{display:block;margin-bottom:4px;font:700 10px Oxanium,Arial,sans-serif;letter-spacing:1.8px;color:#8db6c6}
 #lapHud .lap b{display:block;font:700 clamp(20px,2.8vw,28px) Oxanium,Arial,sans-serif;line-height:1.15;letter-spacing:1px;color:#eafaff}
 #lapHistory{flex:0 1 148px;min-width:0;max-height:min(120px,24vh);overflow-y:auto;overflow-x:hidden;pointer-events:auto;overscroll-behavior:contain;touch-action:pan-y;scrollbar-width:thin;scrollbar-color:#365968 #0b1721;padding:5px 9px;background:#091722e8;border:1px solid #2b4654;border-radius:3px;font:500 11px Oxanium,Arial,sans-serif;letter-spacing:.2px;color:#a9beca;text-align:left;font-variant-numeric:tabular-nums}
 #lapHistory:empty{display:none}
@@ -410,7 +459,7 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 #result .result-card:last-child:nth-child(odd){grid-column:1 / -1}
 @media(max-width:580px){#lapHud{top:8px;right:8px;max-width:calc(100% - 150px);gap:6px;flex-wrap:wrap}#lapHud .panel.lap{min-width:66px;padding:7px 9px}#lapHistory{flex:0 1 132px;font-size:10px;max-height:min(96px,22vh);padding:4px 7px}}
 </style><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.164.1/build/three.module.js"}}</script>
-</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div id="lapHud"><div class="panel lap" aria-label="현재 랩"><b id="lap">1 / 3</b></div><div id="lapHistory" role="log" aria-label="완주 랩 기록" aria-live="polite" aria-relevant="additions text"></div></div><div id="raceActions" hidden><button id="pause" hidden>⏸ PAUSE</button><button id="instantResult">⏭ SKIP</button></div><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
+</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div id="lapHud"><div class="panel lap" aria-label="현재 랩"><span class="lap-label">LAP</span><b id="lap">1 / 3</b></div><div id="lapHistory" role="log" aria-label="완주 랩 기록" aria-live="polite" aria-relevant="additions text"></div></div><div id="raceActions" hidden><button id="pause" hidden>⏸ PAUSE</button><button id="instantResult">⏭ SKIP</button></div><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
 <div id="overlay"><p id="message"></p><h1 id="count"></h1><button id="start">SIMULATION START</button><div id="result"></div></div><div id="error"></div></div>
 <script type="module">
 import * as THREE from 'three';
@@ -530,24 +579,29 @@ cars.forEach((car,i)=>{car.progress=i===0?0:1-i*.009;placeCar(car,i)});
 // 게임 점수를 주행 단위로 변환하는 공통 아케이드 모델입니다.
 // 실제 F1 제원이나 실측값이 아니며, 플레이어와 AI에 동일하게 적용합니다.
 const PHYSICS_STEP=1/120, PROFILE_SIZE=720;
+function gridSkill(car){
+ if(!car.id)return {throttle:1,corner:1,brake:1,pass:.5};
+ return ({rookie:{throttle:.88,corner:.92,brake:.92,pass:1.8},challenger:{throttle:.97,corner:.98,brake:.98,pass:.7},elite:{throttle:1,corner:1,brake:1,pass:.25}})[DATA.difficulty]||{throttle:.97,corner:.98,brake:.98,pass:.7};
+}
 function vehicleModel(car){
   const t=score('topSpeed',car),g=score('grip',car),d=score('downforce',car),c=score('cornering',car),b=score('braking',car),s=score('stability',car);
   // 부품 평균으로 좁아진 점수 범위에 맞춘 게임용 감도입니다. 저장 점수는 바꾸지 않습니다.
   // 월드 좌표 1단위=1m, 내부 속도=m/s, 차량 저장값과 HUD=km/h입니다.
   const power=Math.max(0,Math.min(1,(score('acceleration',car)-.75)/.25));
-  return {maxSpeed:(210+145*Math.max(0,Math.min(1,(t-.45)/.5)))/3.6,drive:12+24*power,mu:1.1+2.8*g,
+  const skill=gridSkill(car);
+  return {skill,maxSpeed:(210+145*Math.max(0,Math.min(1,(t-.45)/.5)))/3.6,drive:12+24*power,mu:1.1+2.8*g,
     aero:.00008+.00022*d,drag:.00007+.00018*d,
     corner:.55+1.05*c,brake:10+27*b,stability:.65+.35*s};
 }
 // 짧은 기존 트랙을 위한 공통 아케이드 코너 접지 배율입니다. 특정 차량 보정이 아닙니다.
-function lateralCapacity(m,v){return 2.4*m.mu*9.81*(1+m.aero*v*v)*m.corner*m.stability}
-function brakeCapacity(m,v){return Math.min(m.brake,m.mu*9.81*(1+m.aero*v*v))*m.stability}
+function lateralCapacity(m,v){return (m.skill?.corner??1)*2.4*m.mu*9.81*(1+m.aero*v*v)*m.corner*m.stability}
+function brakeCapacity(m,v){return (m.skill?.brake??1)*Math.min(m.brake,m.mu*9.81*(1+m.aero*v*v))*m.stability}
 function acceleration(m,v,k){
   const used=Math.min(1,v*v*k/Math.max(.1,lateralCapacity(m,v)));
   const traction=m.mu*9.81*Math.sqrt(Math.max(0,1-used*used));
   // 고속에서 구동력이 너무 일찍 사라지지 않게 하고 항력은 한 번만 차감합니다.
   const engine=m.drive*Math.max(.3,1-.55*Math.pow(v/m.maxSpeed,2));
-  return Math.min(traction,engine)-m.drag*v*v;
+  return (m.skill?.throttle??1)*Math.min(traction,engine)-m.drag*v*v;
 }
 function cornerLimit(m,k){
  if(k<1e-6)return m.maxSpeed;
@@ -714,7 +768,7 @@ function trafficStep(dt){
    const their=Math.min(ahead.c.speedProfile[ri],ahead.v+Math.max(0,acceleration(theirModel,ahead.v,lineK[ri]))*horizon);
    const bend=signedK[j],braking=q.v>c.speedProfile[j]+2;
    const brakeGain=braking?Math.max(0,(q.v*q.v-c.speedProfile[j]*c.speedProfile[j])*.5*(1/brakeCapacity(theirModel,q.v)-1/brakeCapacity(m,q.v))):0;
-   if(q.v-ahead.v>.5||mine-their>1||brakeGain>3){
+   if(q.v-ahead.v>gridSkill(c).pass||mine-their>gridSkill(c).pass+.3||brakeGain>3+gridSkill(c).pass){
     const choices=[-limit,limit].map(l=>{
      const kk=Math.abs(trackK[j]/Math.max(.55,1-bend*l));
      const feasible=cornerLimit(m,kk);
@@ -786,6 +840,7 @@ let resultFramePending=false;
 let physicsAccumulator=0;
 let phase='preview',countEnd=0,startTime=0,lastFrame=performance.now(),elapsed=0,isPaused=false;
 document.getElementById('pause').addEventListener('click',()=>{if(phase!=='running')return;isPaused=!isPaused;lastFrame=performance.now();document.getElementById('pause').textContent=isPaused?'▶ RESUME':'⏸ PAUSE'});
+function publishRacePhase(){streamlitMessage('streamlit:setComponentValue',{value:{phase},dataType:'json'})}
 function startCountdown(){if(phase!=='preview')return;
   // 출발 직전에 한 번만 기존 AI 객체를 만들고, 카운트다운과 레이스에 계속 사용합니다.
   ais.push(...createAICars());cars=[player,...ais];
@@ -793,12 +848,12 @@ function startCountdown(){if(phase!=='preview')return;
     car.progress=-(Math.floor(i/2)*13)/length;car.lateral=i%2?-3.2:3.2;car.targetLane=car.lateral;car.lateralVelocity=0;car.pathFactor=1;car.passTarget=null;car.renderPrevious=null;
     Object.assign(car,{laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,lapTimes:[],best:Infinity,finishTime:Infinity});initializePhysics(car);placeCar(car,i);
   });
-  updateLapHistory();raceMap.hidden=false;updateMinimap();phase='countdown';document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-27).add(new THREE.Vector3(0,19,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
-function startSimulation(now){document.getElementById('back').hidden=false;phase='running';physicsAccumulator=0;elapsed=0;startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('raceActions').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
+  updateLapHistory();raceMap.hidden=false;updateMinimap();phase='countdown';publishRacePhase();document.getElementById('previewPanels').hidden=true;document.getElementById('start').hidden=true;camera.position.copy(player.mesh.position).addScaledVector(frameAt(player.progress).v,-27).add(new THREE.Vector3(0,19,0));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z);document.getElementById('message').textContent='RACE STARTING';document.getElementById('hud').hidden=false;document.getElementById('overlay').style.justifyContent='center';countEnd=performance.now()+4000}
+function startSimulation(now){document.getElementById('back').hidden=false;phase='running';publishRacePhase();physicsAccumulator=0;elapsed=0;startTime=now;lastFrame=now;document.getElementById('pause').hidden=false;document.getElementById('raceActions').hidden=false;document.getElementById('count').textContent='';document.getElementById('message').textContent='';document.getElementById('overlay').style.display='none'}
 function finishSimulation(interrupted=false){
   if(phase!=='running'&&phase!=='skipping')return;
   // 완주 여부나 기록을 수정하지 않고 현재 순위와 실제 기록만 표시합니다.
-  phase='complete';resultFramePending=true;physicsAccumulator=0;isPaused=false;
+  phase='complete';publishRacePhase();resultFramePending=true;physicsAccumulator=0;isPaused=false;
   const lapText=v=>Number.isFinite(v)&&v>0?v.toFixed(2)+' sec':'기록 없음';
   const completed=Math.max(0,Math.min(DATA.laps,player.laps));
   raceMap.hidden=true;document.getElementById('back').hidden=false;
@@ -813,7 +868,7 @@ function finishSimulation(interrupted=false){
 let skipGeneration=0;
 function skipToFinish(){
   if(phase!=='running')return;
-  phase='skipping';isPaused=false;
+  phase='skipping';publishRacePhase();isPaused=false;
   const generation=++skipGeneration;
   document.getElementById('instantResult').disabled=true;
   document.getElementById('instantResult').textContent='⏳ CALCULATING';
@@ -846,7 +901,7 @@ function resetSimulation(){
   skipGeneration++;lastFrame=performance.now();
   ais.forEach(car=>scene.remove(car.mesh));ais.length=0;cars=[player];
   Object.assign(player,{progress:0,laps:0,speed:0,finished:false,top:0,lapStart:0,lastLap:0,lapTimes:[],best:Infinity,finishTime:Infinity});
-  player.lateral=0;player.lateralVelocity=0;player.targetLane=0;player.passTarget=null;placeCar(player,0);physicsAccumulator=0;elapsed=0;countEnd=0;isPaused=false;phase='preview';
+  player.lateral=0;player.lateralVelocity=0;player.targetLane=0;player.passTarget=null;placeCar(player,0);physicsAccumulator=0;elapsed=0;countEnd=0;isPaused=false;phase='preview';publishRacePhase();
   document.getElementById('pause').textContent='⏸ PAUSE';document.getElementById('pause').hidden=true;document.getElementById('raceActions').hidden=true;
   document.getElementById('back').hidden=true;document.getElementById('hud').hidden=true;
   document.getElementById('previewPanels').hidden=false;raceMap.hidden=true;mapMarkers.forEach(dot=>dot.remove());mapMarkers.length=0;document.getElementById('start').hidden=false;
