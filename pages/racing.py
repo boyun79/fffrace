@@ -397,15 +397,20 @@ canvas{display:block;width:100%;height:100%}.hud{position:absolute;inset:0;point
 #back{z-index:30;max-width:calc(100% - 24px)}
 #game:has(.show-results) #back{right:12px;bottom:12px}
 @media(max-height:540px){#overlay.show-results{padding-top:8px}#result .result-card{padding:8px}#result .result-rank{padding:8px}}
-/* 랩 기록만 추가: 미니맵과 기존 HUD 색상은 유지합니다. */
-.panel.lap{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:flex-start;gap:8px;max-width:calc(100% - 210px)}
-#lapHistory{font-size:11px;letter-spacing:0;line-height:1.6;white-space:nowrap;text-align:left}
+/* 독립된 LAP 진행 카드와 작은 기록 패널: 공통 외곽 카드는 사용하지 않습니다. */
+#lapHud{position:absolute;top:12px;right:12px;display:flex;align-items:flex-start;justify-content:flex-end;gap:8px;max-width:calc(100% - 218px)}
+#lapHud .panel.lap{position:static;flex:0 0 auto;max-width:none;min-width:76px;padding:8px 12px;text-align:center}
+#lapHud .lap b{display:block;font:700 clamp(20px,2.8vw,28px) Oxanium,Arial,sans-serif;line-height:1.15;letter-spacing:1px;color:#eafaff}
+#lapHistory{flex:0 1 148px;min-width:0;max-height:min(120px,24vh);overflow-y:auto;overflow-x:hidden;pointer-events:auto;overscroll-behavior:contain;touch-action:pan-y;scrollbar-width:thin;scrollbar-color:#365968 #0b1721;padding:5px 9px;background:#091722e8;border:1px solid #2b4654;border-radius:3px;font:500 11px Oxanium,Arial,sans-serif;letter-spacing:.2px;color:#a9beca;text-align:left;font-variant-numeric:tabular-nums}
 #lapHistory:empty{display:none}
+#lapHistory .lap-record{display:flex;align-items:center;justify-content:space-between;gap:9px;min-height:23px;white-space:nowrap}
+#lapHistory .lap-record + .lap-record{border-top:1px solid #20333e}
+#lapHistory .lap-record time{color:#b9dee7;font-weight:500}
+#game:has(.show-results) #lapHud{display:none!important}
 #result .result-card:last-child:nth-child(odd){grid-column:1 / -1}
-.result-laps{margin-top:10px;font-size:12px;line-height:1.7;color:#afbdca}
-@media(max-width:580px){.panel.lap{max-width:calc(100% - 152px);padding:6px;gap:4px}#lapHistory{font-size:10px}}
+@media(max-width:580px){#lapHud{top:8px;right:8px;max-width:calc(100% - 150px);gap:6px;flex-wrap:wrap}#lapHud .panel.lap{min-width:66px;padding:7px 9px}#lapHistory{flex:0 1 132px;font-size:10px;max-height:min(96px,22vh);padding:4px 7px}}
 </style><script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.164.1/build/three.module.js"}}</script>
-</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div class="panel lap"><div>LAP<br><b id="lap">1 / 3</b></div><div id="lapHistory" aria-live="polite"></div></div><div id="raceActions" hidden><button id="pause" hidden>⏸ PAUSE</button><button id="instantResult">⏭ SKIP</button></div><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
+</head><body><div id="game"><div id="previewPanels"><div id="trackPanel"><div class="previewTitle">TRACK TEST CIRCUIT</div><svg id="trackSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div id="circuitControls"><strong>트랙 선택</strong><button data-circuit="monaco">🏁 Monaco Circuit</button><button data-circuit="british">🏁 British Circuit</button><button data-circuit="australian">🏁 Australian Circuit</button></div></div><div id="carPanel"><div class="previewTitle">MY 3D F1 CAR</div></div><div id="performancePanel"><div class="previewTitle">CAR PERFORMANCE</div>__PERFORMANCE__</div></div><div class="hud" id="hud" hidden><div id="lapHud"><div class="panel lap" aria-label="현재 랩"><b id="lap">1 / 3</b></div><div id="lapHistory" role="log" aria-label="완주 랩 기록" aria-live="polite" aria-relevant="additions text"></div></div><div id="raceActions" hidden><button id="pause" hidden>⏸ PAUSE</button><button id="instantResult">⏭ SKIP</button></div><div class="speed">SPEED <b id="speed">0</b> km/h</div></div><div id="raceMap" hidden>RACE MAP<svg id="mapSvg" viewBox="0 0 320 390" preserveAspectRatio="xMidYMid meet"></svg><div class="legend">● MY CAR &nbsp; ○ AI CARS</div><div class="panel pos">POSITION<br><b id="position">1 / 5</b></div></div><button id="back" hidden>↩ PREPARATION</button>
 <div id="overlay"><p id="message"></p><h1 id="count"></h1><button id="start">SIMULATION START</button><div id="result"></div></div><div id="error"></div></div>
 <script type="module">
 import * as THREE from 'three';
@@ -773,7 +778,7 @@ function rank(){return 1+ais.filter(c=>{
 }).length}
 const targetCamera=new THREE.Vector3();
 function updateCamera(dt){let f=frameAt(player.progress);targetCamera.copy(player.mesh.position).addScaledVector(f.v,-16).add(new THREE.Vector3(0,8,0));camera.position.lerp(targetCamera,1-Math.exp(-4*dt));camera.lookAt(player.mesh.position.x,1,player.mesh.position.z)}
-function lapHistoryMarkup(){return (player.lapTimes||[]).map((t,i)=>'<div>'+(i+1)+'랩 랩타임 '+t.toFixed(2)+'초</div>').join('')}
+function lapHistoryMarkup(){return (player.lapTimes||[]).map((t,i)=>'<div class="lap-record"><span>LAP '+(i+1)+'</span><time>— '+t.toFixed(2)+'s</time></div>').join('')}
 let historyCount=-1;
 function updateLapHistory(){const n=(player.lapTimes||[]).length;if(n===historyCount)return;historyCount=n;document.getElementById('lapHistory').innerHTML=lapHistoryMarkup()}
 function updateHUD(){document.getElementById('position').textContent=rank()+' / 5';document.getElementById('lap').textContent=Math.min(3,player.laps+1)+' / 3';document.getElementById('speed').textContent=Math.round(player.displaySpeed??player.speed);updateLapHistory()}
@@ -799,7 +804,7 @@ function finishSimulation(interrupted=false){
   raceMap.hidden=true;document.getElementById('back').hidden=false;
   document.getElementById('overlay').style.display='flex';document.getElementById('overlay').classList.add('show-results');
   document.getElementById('result').style.display='block';
-  document.getElementById('result').innerHTML='<div class="result-title">레이스 결과</div><div class="result-sub">'+(interrupted?'중도 종료':'RACE COMPLETED')+'</div><div class="result-rank"><span>'+(interrupted?'종료 시점 순위':'최종 순위')+'</span><strong>'+rank()+' / '+cars.length+'</strong></div><div class="result-grid"><div class="result-card"><span>완주 랩 수</span><b>'+completed+'</b></div><div class="result-card"><span>최고속도</span><b>'+Math.round(Number.isFinite(player.top)?player.top:0)+' km/h</b></div><div class="result-card"><span>완주 시간</span><b>'+lapText(player.finishTime)+'</b></div><div class="result-card"><span>최고 랩타임</span><b>'+lapText(player.best)+'</b></div></div><div class="result-laps">'+lapHistoryMarkup()+'</div>';updateLapHistory();
+  document.getElementById('result').innerHTML='<div class="result-title">레이스 결과</div><div class="result-sub">'+(interrupted?'중도 종료':'RACE COMPLETED')+'</div><div class="result-rank"><span>'+(interrupted?'종료 시점 순위':'최종 순위')+'</span><strong>'+rank()+' / '+cars.length+'</strong></div><div class="result-grid"><div class="result-card"><span>완주 랩 수</span><b>'+completed+'</b></div><div class="result-card"><span>최고속도</span><b>'+Math.round(Number.isFinite(player.top)?player.top:0)+' km/h</b></div><div class="result-card"><span>완주 시간</span><b>'+lapText(player.finishTime)+'</b></div><div class="result-card"><span>최고 랩타임</span><b>'+lapText(player.best)+'</b></div></div>';
   document.getElementById('hud').hidden=true;
   document.getElementById('pause').hidden=true;
   document.getElementById('raceActions').hidden=true;
