@@ -1,3 +1,4 @@
+from pathlib import Path
 """F1 Racing Simulator Garage
 
 실행: streamlit run main.py
@@ -193,7 +194,7 @@ def apply_game_css():
 # -----------------------------------------------------------------------------
 # 4. 실제 WebGL 3D 차량
 # -----------------------------------------------------------------------------
-def build_3d_html(parts, selections, active_part):
+def _build_car_scene_html(parts, selections, active_part):
     """Three.js로 회전·확대·레이캐스팅이 가능한 3D F1 차량을 만듭니다.
 
     차량은 평면 이미지가 아니라 여러 개의 곡면 3D 메시로 구성됩니다. 각 메시에는
@@ -286,39 +287,102 @@ def build_3d_html(parts, selections, active_part):
     </script></body></html>"""
 
 
-def render_3d_car(parts, selections, active_part):
-    """중앙의 가장 큰 영역에 실제 WebGL 3D 뷰어를 삽입합니다."""
-    components.html(build_3d_html(parts, selections, active_part), height=540, scrolling=False)
+def build_3d_html(parts, selections, active_part, preview=False, flat=False):
+    selections = {k: selections.get(k) if selections.get(k) in d["options"] else list(d["options"])[1] for k, d in parts.items()}
+    if active_part not in parts:
+        active_part = next(iter(parts))
+    doc = _build_car_scene_html(parts, selections, active_part)
+    doc = doc.replace("names[hovered]", "(names[hovered] || '차체 구조')")
+    doc = doc.replace("'클릭하면 설정 패널이 열립니다'", "(cfg[hovered]?.key ? '클릭하여 파츠 설정' : '별도 설정이 없는 차체 구조입니다')")
+    doc = doc.replace("m.material.emissiveIntensity=m.parent===activeGroup?2.8:1", "m.material.emissiveIntensity=m.parent===activeGroup?.35:.12")
+    doc = doc.replace("renderer.domElement.style.cursor='pointer'", "renderer.domElement.style.cursor=cfg[hovered]?.key?'pointer':'grab'")
+    start = doc.index("    // 선택하지 않은 부분")
+    end = doc.index("    const ray=", start)
+    doc = doc[:start] + """
+    // 공유 재질을 분리한 뒤 선택 부품만 차분하게 강조합니다.
+    Object.values(partGroups).forEach(g=>g.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.material.emissive?.setHex(g===activeGroup?0x163b45:0);o.material.emissiveIntensity=.35}}));
+    let activeBox=null,activeLight=null;
+""" + doc[end:]
+    start = doc.index("    renderer.domElement.addEventListener('click'")
+    end = doc.index("    window.addEventListener('resize'",start)
+    doc = doc[:start] + """
+    let pointerStart=null;
+    renderer.domElement.addEventListener('pointerdown',e=>{pointerStart={x:e.clientX,y:e.clientY,id:e.pointerId}});
+    renderer.domElement.addEventListener('pointerup',e=>{
+      if(!pointerStart||e.pointerId!==pointerStart.id)return;
+      const distance=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);pointerStart=null;
+      if(distance>5)return;
+      const object=hit(e),key=cfg[object?.userData.part]?.key;
+      if(key)window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setComponentValue',value:{part:key,event:Date.now()+'-'+Math.random()},dataType:'json'},'*');
+    });
+    renderer.domElement.addEventListener('pointercancel',()=>pointerStart=null);
+    window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},'*');
+    window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:540},'*');
+""" + doc[end:]
+    if preview:
+        injection = """
+    car.rotation.set(0,0,0);platform.visible=false;ring.visible=false;
+    Object.entries(partGroups).forEach(([name,g])=>g.visible=(g===activeGroup));
+    labels.domElement.style.display='none';
+    document.getElementById('hint').style.display='none';document.getElementById('badge').style.display='none';
+    const bounds=new THREE.Box3().setFromObject(activeGroup),center=new THREE.Vector3(),size=new THREE.Vector3();bounds.getCenter(center);bounds.getSize(size);
+    controls.target.copy(center);controls.autoRotate=false;
+    const radius=Math.max(size.x,size.y,size.z,.5);
+    camera.position.copy(center).add(new THREE.Vector3(1,.8,1.4).normalize().multiplyScalar(radius*2.3));
+    controls.minDistance=radius*.8;controls.maxDistance=radius*5;camera.lookAt(center);
+"""
+        if flat:
+            injection += """
+    // 원근 왜곡 없는 실제 메시 투영. 조립 위치와 형상은 변경하지 않습니다.
+    const ratio=app.clientWidth/app.clientHeight,extent=radius*.7;
+    const ortho=new THREE.OrthographicCamera(-extent*ratio,extent*ratio,extent,-extent,.01,100);
+    ortho.position.copy(center).add(new THREE.Vector3(1,.8,1.4).normalize().multiplyScalar(20));ortho.lookAt(center);
+    controls.enabled=false;
+    renderer.render=function(sc,cam){THREE.WebGLRenderer.prototype.render.call(renderer,sc,ortho)};
+"""
+        doc=doc.replace("    const ray=", injection+"    const ray=",1)
+        doc=doc.replace("    let pointerStart=null;", "    let pointerStart=null;",1)
+        # previews never send selection or component lifecycle messages
+        doc=re.sub(r"    let pointerStart=null;.*?(?=    window.addEventListener\('resize')", "", doc, flags=re.S)
+    doc=doc.replace("d.textContent=names[n]", "d.textContent=names[n] || '차체 구조'")
+    doc=doc.replace("box-shadow:0 0 8px #ff3158,0 0 24px #ff3158,0 0 42px #27d6ff", "box-shadow:none")
+    doc=doc.replace("background:#35101c;border:2px solid #ff3158", "background:#102630;border:1px solid #27d6ff")
+    return doc
 
+
+def render_3d_car(parts, selections, active_part):
+    """정식 컴포넌트 값으로 선택을 전달하여 세션을 유지합니다."""
+    import tempfile
+    import sys
+    import types
+    import importlib.machinery
+    folder = st.session_state.get("garage_viewer_folder")
+    if not folder or not Path(folder).is_dir():
+        folder = tempfile.mkdtemp(prefix="f1_garage_")
+        st.session_state["garage_viewer_folder"] = folder
+    target = Path(folder, "index.html")
+    document = build_3d_html(parts, selections, active_part)
+    if not target.exists() or target.read_text(encoding="utf-8") != document:
+        target.write_text(document, encoding="utf-8")
+    module_name = "garage_viewer_registration"
+    module = sys.modules.get(module_name)
+    if module is None:
+        module = types.ModuleType(module_name)
+        module.__file__ = str(Path(folder, "registration.py"))
+        module.__spec__ = importlib.machinery.ModuleSpec(module_name, loader=None)
+        sys.modules[module_name] = module
+        exec(compile("import streamlit.components.v1 as components\ndef declare(folder):\n return components.declare_component('garage_parts',path=folder)\n", module.__file__, "exec"), module.__dict__)
+    event = module.declare(folder)(key="garage_part_picker", default=None)
+    if isinstance(event, dict) and event.get("part") in parts and event.get("event") != st.session_state.get("garage_last_pick"):
+        st.session_state["garage_last_pick"] = event["event"]
+        st.session_state.active_part = event["part"]
+        st.query_params.pop("part", None)
+        st.rerun()
 
 
 def build_part_preview_html(parts, selections, active_part):
-    """선택한 파츠만 확대해 보여 주는 별도의 회전 가능한 3D 프리뷰를 만듭니다."""
-    data = parts[active_part]
-    option = data["options"][selections[active_part]]
-    cfg = json.dumps({"part": active_part, "color": option["color"], "shape": option["shape"], "variant": list(data["options"]).index(selections[active_part])})
-    return f"""<!doctype html><html><head><style>*{{box-sizing:border-box}}html,body,#p{{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(circle,#24313d,#090d12 70%)}}canvas{{display:block}}#tag{{position:absolute;left:14px;bottom:10px;color:#8d9baa;font:10px Arial;letter-spacing:1px}}</style><script type='importmap'>{{"imports":{{"three":"https://unpkg.com/three@0.164.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.164.1/examples/jsm/"}}}}</script></head><body><div id='p'></div><div id='tag'>DRAG TO INSPECT · 3D PART MODEL</div><script type='module'>
-    import * as THREE from 'three';import {{OrbitControls}} from 'three/addons/controls/OrbitControls.js';
-    const cfg={cfg},root=document.getElementById('p'),scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(36,root.clientWidth/root.clientHeight,.1,50);camera.position.set(4,2.6,5.5);
-    const renderer=new THREE.WebGLRenderer({{antialias:true,alpha:true}});renderer.setSize(root.clientWidth,root.clientHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;root.appendChild(renderer.domElement);
-    const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.autoRotate=true;controls.autoRotateSpeed=.8;controls.minDistance=3.5;controls.maxDistance=10;
-    scene.add(new THREE.HemisphereLight(0xcce6ff,0x111111,2.7));const light=new THREE.DirectionalLight(0xffffff,4);light.position.set(4,6,3);scene.add(light);const rim=new THREE.PointLight(0x27d6ff,35,15);rim.position.set(-4,2,-2);scene.add(rim);
-    const g=new THREE.Group();scene.add(g);const m=new THREE.MeshStandardMaterial({{color:cfg.color,metalness:.7,roughness:.22,emissive:0x101820}}),dark=new THREE.MeshStandardMaterial({{color:0x090b0e,roughness:.65}});
-    function add(geo,pos=[0,0,0],rot=[0,0,0],mat=m){{const o=new THREE.Mesh(geo,mat);o.position.set(...pos);o.rotation.set(...rot);o.castShadow=true;g.add(o)}}
-    const cap=(r,l)=>new THREE.CapsuleGeometry(r,l,8,28),s=cfg.shape;
-    const v=cfg.variant;
-    if(cfg.part==='front_wing'){{Array.from({{length:2+v}},(_,i)=>add(cap(.11+v*.015,(3.0+v*.38)*s),[0,-.25+i*.25,-i*.28],[i*.08,0,Math.PI/2]));[-1,1].forEach(x=>add(new THREE.BoxGeometry(.08,.55+v*.15,.62+v*.1),[x*(1.6+v*.18)*s,-.05,.02]))}}
-    else if(cfg.part==='rear_wing'){{Array.from({{length:1+v}},(_,i)=>add(cap(.13+v*.02,(2.5+v*.32)*s),[0,.55-i*.4,-i*.16],[i*.1,0,Math.PI/2]));[-1,1].forEach(x=>add(new THREE.BoxGeometry(.1,1.1+v*.25,.18),[x*(1.0+v*.13)*s,-.25,.1]))}}
-    else if(cfg.part==='tyres'){{add(new THREE.TorusGeometry(1.05,.50-v*.07,18+v*8,64),[0,0,0],[0,Math.PI/2,0],dark);add(new THREE.TorusGeometry(1.04,.075-v*.012,10,64),[0,0,0],[0,Math.PI/2,0],m);for(let i=0;i<4+v*3;i++)add(new THREE.BoxGeometry(.05,.12,.35),[0,Math.sin(i/(4+v*3)*6.28)*.82,Math.cos(i/(4+v*3)*6.28)*.82],[i,0,0],m)}}
-    else if(cfg.part==='brakes'){{add(new THREE.CylinderGeometry(1-v*.12,1-v*.12,.18,36+v*12),[0,0,0],[0,0,Math.PI/2]);add(new THREE.BoxGeometry(.32+v*.1,1.0-v*.1,.45),[0,.25,.72]);for(let i=0;i<v*6;i++)add(new THREE.CylinderGeometry(.035,.035,.25,8),[0,Math.sin(i/6*6.28)*.62,Math.cos(i/6*6.28)*.62],[0,0,Math.PI/2],dark)}}
-    else if(cfg.part==='suspension'){{Array.from({{length:2+v}},(_,i)=>-.7+i*(1.4/(1+v))).forEach((x,i)=>add(new THREE.CylinderGeometry(.085-v*.02,.085-v*.02,3.0+v*.15,12),[x,0,0],[0,0,(i-(1+v)/2)*.35]));add(new THREE.CylinderGeometry(.42-v*.06,.42-v*.06,2.1,24),[0,0,0])}}
-    else if(cfg.part==='floor'){{const w=1.35+(.5-v*.2), sh=new THREE.Shape().moveTo(-w,-2).lineTo(-1.1-v*.12,2).lineTo(1.1+v*.12,2).lineTo(w,-2).lineTo(-w,-2);add(new THREE.ExtrudeGeometry(sh,{{depth:.10+v*.04,bevelEnabled:true,bevelSize:.05,bevelThickness:.04}}),[0,0,0],[Math.PI/2,0,0]);for(let i=0;i<v+1;i++)add(new THREE.BoxGeometry(.06,.25,3.2),[-.55+i*1.1,-.18,0])}}
-    else if(cfg.part==='diffuser'){{Array.from({{length:3+v*2}},(_,i)=>-1.2+i*(2.4/(2+v*2))).forEach(x=>add(new THREE.BoxGeometry(.08,.7+v*.25,(1.7+v*.4)*s),[x,0,0],[.22+v*.12,0,0]));add(new THREE.BoxGeometry(3.1,.12,(1.7+v*.35)*s),[0,-.55,0],[.15+v*.08,0,0])}}
-    else if(cfg.part==='engine'){{add(cap(.55+(.18-v*.08),2.0+(.5-v*.2)),[0,0,0],[Math.PI/2,0,0]);[-1,1].forEach(x=>add(new THREE.CylinderGeometry(.24+(.12-v*.03),.4-v*.04,1.2+v*.15,20+v*6),[x*(.72+v*.08),0,0],[Math.PI/2,0,0]))}}
-    else{{Array.from({{length:1+v}},(_,i)=>add(new THREE.TorusGeometry(1.05-i*.25,.20-v*.025,18,48),[0,0,i*.18]));add(new THREE.CylinderGeometry(.16+.03*v,.16+.03*v,2.2+v*.2,18),[0,0,0],[0,0,Math.PI/2])}}
-    const ground=new THREE.Mesh(new THREE.CircleGeometry(4,64),new THREE.MeshStandardMaterial({{color:0x10161c,metalness:.5,roughness:.5}}));ground.rotation.x=-Math.PI/2;ground.position.y=-1.5;scene.add(ground);
-    function tick(){{requestAnimationFrame(tick);controls.update();renderer.render(scene,camera)}}tick();window.addEventListener('resize',()=>{{camera.aspect=root.clientWidth/root.clientHeight;camera.updateProjectionMatrix();renderer.setSize(root.clientWidth,root.clientHeight)}});
-    </script></body></html>"""
+    """완성 차량의 실제 메시를 그대로 분리해 보여 줍니다."""
+    return build_3d_html(parts, selections, active_part, preview=True)
 
 
 def render_part_description(active_part, parts):
@@ -462,7 +526,10 @@ def render_part_options(parts, active_part, selections):
     for variant, ((option_key, option), column) in enumerate(zip(data["options"].items(), columns)):
         with column:
             tooltip = html.escape(option["explanation"], quote=True)
-            st.markdown(f"<div class='option-visual option-tip'>{render_option_svg(active_part, variant, option['color'])}<span class='tip-box'>{tooltip}</span></div><div class='option-name'><span class='hover-tip'>{option['label']} ⓘ<span class='tip-box'>{tooltip}</span></span></div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
+            option_selection = dict(selections)
+            option_selection[active_part] = option_key
+            components.html(build_3d_html(parts, option_selection, active_part, preview=True, flat=True), height=150, scrolling=False)
+            st.markdown(f"<div class='option-name'>{html.escape(option['label'])}</div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
             if selections[active_part] == option_key:
                 st.markdown("<div class='installed'>장착 중 ✓</div>", unsafe_allow_html=True)
             elif st.button("이 파츠 장착", key=f"equip_{active_part}_{option_key}", use_container_width=True):
@@ -523,6 +590,15 @@ def main():
     """데이터 준비 → 사용자 입력 → 계산 → 3D 및 UI 렌더링 순서로 앱을 실행합니다."""
     st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏁", layout="wide", initial_sidebar_state="collapsed")
     apply_game_css()
+    st.markdown("""<style>
+    .stButton>button{border-radius:6px;min-height:40px;box-shadow:none!important;transition:background .12s,border-color .12s}
+    .stButton>button:focus:not(:focus-visible){outline:none;box-shadow:none!important}
+    .stButton>button:focus-visible{outline:2px solid #27d6ff!important;outline-offset:3px}
+    .tuning-bay{background:#101720;box-shadow:none;border-radius:8px;padding:16px}
+    .garage-head{box-shadow:none}.option-visual{box-shadow:none}
+    .home-card{border-radius:8px;box-shadow:none}.selected-option{box-shadow:none;border-color:#27d6ff}
+    input,[data-baseweb="select"]{border-radius:6px}
+    </style>""", unsafe_allow_html=True)
     if "app_view" not in st.session_state:
         st.session_state.app_view = "home"
     if st.session_state.app_view == "home":
@@ -530,7 +606,7 @@ def main():
         .home-wrap{max-width:950px;margin:9vh auto 0;text-align:center;padding:32px;color:#eff5fa}
         .home-title{font-size:clamp(32px,5vw,58px);font-weight:900;letter-spacing:2px}
         .home-title b{color:#ff3158}.home-sub{color:#a8bac9;margin:12px 0 35px}
-        .home-card{background:#101821;border:1px solid #344353;border-top:3px solid #27d6ff;
+        .home-card{background:#101821;border:1px solid #344353;border-top:1px solid #344353;
         padding:24px;text-align:left;min-height:125px}.home-card h3{margin:0 0 10px}
         .home-card p{color:#a8bac9;font-size:14px}.home-locked{border-top-color:#677481}
         </style>""", unsafe_allow_html=True)
@@ -572,6 +648,7 @@ def main():
     query_part = st.query_params.get("part")
     if query_part in parts:
         st.session_state.active_part = query_part
+        st.query_params.pop("part", None)
     if "active_part" not in st.session_state:
         st.session_state.active_part = "front_wing"
     if "open_part_info" not in st.session_state:
