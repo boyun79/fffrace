@@ -1,10 +1,10 @@
 from pathlib import Path
-"""F1 Racing Simulator Garage
+"""F1 Racing Simulator Garage"""
 
 실행: streamlit run main.py
 필수 패키지: streamlit
 3D 렌더링은 Streamlit 안의 Three.js 웹 컴포넌트가 담당합니다.
-"""
+
 
 import html
 import json
