@@ -8,6 +8,7 @@ from pathlib import Path
 
 import html
 import json
+import re
 from copy import deepcopy
 
 import streamlit as st
