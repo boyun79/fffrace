@@ -311,33 +311,20 @@ def build_3d_html(parts, selections, active_part, preview=False, flat=False):
     window.addEventListener('message',event=>{if(event.source===window.parent&&event.data?.type==='garage:select')selectPart(event.data.part)});
     window.parent.postMessage({type:'garage:ready'},'*');
 """ + doc[end:]
+    # Remove only the old selection listener; OrbitControls owns camera input.
     start = doc.index("    renderer.domElement.addEventListener('click'")
-    end = doc.index("    window.addEventListener('resize'",start)
+    end = doc.index("    window.addEventListener('resize'", start)
+    doc = doc[:start] + doc[end:]
+    start = doc.index("    renderer.domElement.addEventListener('pointermove'")
+    end = doc.index("    window.addEventListener('resize'", start)
     doc = doc[:start] + """
-    let pointerStart=null;
-    renderer.domElement.addEventListener('pointerdown',e=>{if(e.button!==0||pointerStart){if(pointerStart)pointerStart.dragged=true;return;}pointerStart={x:e.clientX,y:e.clientY,id:e.pointerId,dragged:false}});
-    renderer.domElement.addEventListener('pointerup',e=>{
-      if(!pointerStart||e.pointerId!==pointerStart.id)return;
-      const pointerStartDragged=pointerStart.dragged;const distance=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);pointerStart=null;
-      if(distance>5||pointerStartDragged)return;
-      const object=hit(e),key=cfg[object?.userData.part]?.key;
-      if(key){selectPart(key);window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setComponentValue',value:{part:key,event:Date.now()+'-'+Math.random()},dataType:'json'},'*');}
-    });
-    renderer.domElement.addEventListener('pointercancel',()=>pointerStart=null);
-    window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},'*');
-    window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:540},'*');
-""" + doc[end:]
-    hover_start = doc.index("    renderer.domElement.addEventListener('pointermove'")
-    hover_end = doc.index("    let pointerStart=null;", hover_start)
-    doc = doc[:hover_start] + """
     renderer.domElement.addEventListener('pointermove',e=>{
-      if(pointerStart && Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>5)pointerStart.dragged=true;
-      const obj=hit(e);hovered=obj?.userData.part || null;
-      renderer.domElement.style.cursor=cfg[hovered]?.key?'pointer':'grab';
-      info.style.opacity=obj?1:0;
-      if(obj){info.replaceChildren();const title=document.createElement('b'),description=document.createElement('span');title.textContent=names[hovered]||'차체 구조';description.textContent=descriptions[hovered]||(cfg[hovered]?.key?'클릭하여 파츠 설정':'별도 설정이 없는 차체 구조입니다');info.append(title,description)}
+      const obj=hit(e);hovered=obj?.userData.part||null;
+      renderer.domElement.style.cursor='grab';info.style.opacity=obj?1:0;
+      if(obj){info.replaceChildren();const title=document.createElement('b'),description=document.createElement('span');title.textContent=names[hovered]||'차체 구조';description.textContent=descriptions[hovered]||'왼쪽 목록에서 파츠를 선택하세요';info.append(title,description)}
     });
-""" + doc[hover_end:]
+""" + doc[end:]
+    doc=doc.replace(' · PART 클릭', ' · 왼쪽 목록에서 파츠 선택')
     doc = doc.replace('o.material.emissiveIntensity=2.5*pulse', 'o.material.emissiveIntensity=.65*pulse')
     if preview:
         injection = """
@@ -353,17 +340,31 @@ def build_3d_html(parts, selections, active_part, preview=False, flat=False):
 """
         if flat:
             injection += """
-    // 원근 왜곡 없는 실제 메시 투영. 조립 위치와 형상은 변경하지 않습니다.
-    const ratio=app.clientWidth/app.clientHeight,extent=radius*.7;
-    const ortho=new THREE.OrthographicCamera(-extent*ratio,extent*ratio,extent,-extent,.01,100);
-    ortho.position.copy(center).add(new THREE.Vector3(1,.8,1.4).normalize().multiplyScalar(20));ortho.lookAt(center);
-    controls.enabled=false;
+    // Same mesh/option data as the upper preview; fixed orthographic 2D image.
+    const ortho=new THREE.OrthographicCamera(-1,1,1,-1,.01,100);
+    const viewDirection=new THREE.Vector3(1,.8,1.4).normalize();
+    ortho.position.copy(center).addScaledVector(viewDirection,20);ortho.lookAt(center);ortho.updateMatrixWorld(true);
+    function fitProjection(){
+      const ratio=Math.max(app.clientWidth,1)/Math.max(app.clientHeight,1);
+      let maxX=0,maxY=0;
+      for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
+        const point=new THREE.Vector3(x,y,z).applyMatrix4(ortho.matrixWorldInverse);
+        maxX=Math.max(maxX,Math.abs(point.x));maxY=Math.max(maxY,Math.abs(point.y));
+      }
+      const halfHeight=Math.max(maxY,maxX/ratio,.05)*1.12;
+      ortho.left=-halfHeight*ratio;ortho.right=halfHeight*ratio;ortho.top=halfHeight;ortho.bottom=-halfHeight;ortho.updateProjectionMatrix();
+    }
+    fitProjection();controls.enabled=false;
+    // Static projections retain original materials rather than selection emission.
+    activeGroup.traverse(o=>{if(o.isMesh){o.material.emissive?.setHex(o.userData.baseEmissive);o.material.emissiveIntensity=o.userData.baseIntensity}});
     renderer.render=function(sc,cam){THREE.WebGLRenderer.prototype.render.call(renderer,sc,ortho)};
+    window.addEventListener('resize',()=>{fitProjection();renderer.render(scene,ortho)});
 """
         doc=doc.replace("    const ray=", injection+"    const ray=",1)
-        doc=doc.replace("    let pointerStart=null;", "    let pointerStart=null;",1)
-        # previews never send selection or component lifecycle messages
-        doc=re.sub(r"    let pointerStart=null;.*?(?=    window.addEventListener\('resize')", "", doc, flags=re.S)
+        if flat:
+            animation_start=doc.index("    function animate(t)")
+            animation_end=doc.index("    </script>", animation_start)
+            doc=doc[:animation_start]+"    renderer.render(scene,camera);\n"+doc[animation_end:]
     doc=doc.replace("d.textContent=names[n]", "d.textContent=names[n] || '차체 구조'")
     doc=doc.replace("box-shadow:0 0 8px #ff3158,0 0 24px #ff3158,0 0 42px #27d6ff", "box-shadow:none")
     doc=doc.replace("background:#35101c;border:2px solid #ff3158", "background:#102630;border:1px solid #27d6ff")
@@ -383,7 +384,7 @@ def render_3d_car(parts, selections, active_part):
     target = Path(folder, "index.html")
     document = build_3d_html(parts, selections, active_part)
     bootstrap = """<!doctype html><html><head><meta charset="utf-8"></head>
-<body style="margin:0;overflow:hidden"><iframe id="scene" title="3D 차량 파츠 선택" style="border:0;width:100%;height:540px;display:block"></iframe>
+<body style="margin:0;overflow:hidden"><iframe id="scene" title="3D 차량 보기" style="border:0;width:100%;height:540px;display:block"></iframe>
 <script>
 const scene=document.getElementById('scene');let lastModel=null,currentPart=null;
 function syncSelection(){scene.contentWindow.postMessage({type:'garage:select',part:currentPart},'*')}
@@ -393,8 +394,6 @@ window.addEventListener('message',event=>{
   const document=message.args?.document,model=message.args?.model;currentPart=message.args?.active_part;
   if(typeof document==='string' && model!==lastModel){lastModel=model;scene.srcdoc=document;}else{syncSelection();}
  }else if(event.source===scene.contentWindow && message?.type==='garage:ready'){syncSelection();
- }else if(event.source===scene.contentWindow && message?.isStreamlitMessage && message.type==='streamlit:setComponentValue'){
-  window.parent.postMessage(message,'*');
  }
 });
 window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},'*');
@@ -410,13 +409,8 @@ window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeigh
         module.__spec__ = importlib.machinery.ModuleSpec(module_name, loader=None)
         sys.modules[module_name] = module
         exec(compile("import streamlit.components.v1 as components\ndef declare(folder):\n return components.declare_component('garage_parts',path=folder)\n", module.__file__, "exec"), module.__dict__)
-    event = module.declare(folder)(document=document, model=json.dumps(selections, sort_keys=True), active_part=active_part, key="garage_part_picker", default=None)
-    if isinstance(event, dict) and event.get("part") in parts and event.get("event") != st.session_state.get("garage_last_pick"):
-        st.session_state["garage_last_pick"] = event["event"]
-        st.session_state.active_part = event["part"]
-        st.session_state.open_part_info = None
-        st.query_params.pop("part", None)
-        st.rerun()
+    module.declare(folder)(document=document, model=json.dumps(selections, sort_keys=True), active_part=active_part, key="garage_part_picker", default=None)
+
 
 
 def build_part_preview_html(parts, selections, active_part):
@@ -510,14 +504,14 @@ def render_part_menu(parts, active_part):
     """왼쪽 메뉴는 파츠 선택과 클릭형 물음표 설명만 담당합니다."""
     st.markdown("<div class='section-label'>01 / PARTS</div>", unsafe_allow_html=True)
     selected_rules = "".join(
-        f".st-key-menu_{key} button{{background:#102d38!important;border:1px solid #27d6ff!important;color:#dffaff!important;box-shadow:none!important}}"
+        f"div.st-key-part_choice_{key} div.stButton > button{{background:#143746!important;border:2px solid #27d6ff!important;color:#edfcff!important;box-shadow:0 0 0 1px #27d6ff33!important}}"
         for key in parts if key == active_part
     )
     st.markdown(f"<style>{selected_rules}</style>", unsafe_allow_html=True)
     for key, data in parts.items():
         part_column, info_column = st.columns([5, 1], gap="small")
-        with part_column:
-            if st.button(f"{'▸ ' if key == active_part else ''}{data['icon']}   {data['name']}", key=f"menu_{key}", type="primary" if key == active_part else "secondary", use_container_width=True):
+        with part_column, st.container(key=f"part_choice_{key}"):
+            if st.button(f"{data['icon']}   {data['name']}", key=f"menu_{key}", type="primary" if key == active_part else "secondary", use_container_width=True):
                 st.session_state.active_part = key
                 # 다른 파츠를 고르면 이전 설명창은 자연스럽게 닫습니다.
                 st.session_state.open_part_info = None
@@ -572,9 +566,8 @@ def render_part_options(parts, active_part, selections):
             tooltip = html.escape(option["explanation"], quote=True)
             option_selection = dict(selections)
             option_selection[active_part] = option_key
-            # 기존 SVG 생성기를 재사용하므로 WebGL 초기화 없이 2D 형상이 표시됩니다.
-            svg = render_option_svg(active_part, variant, option["color"])
-            components.html("<style>html,body{margin:0;background:#101720}svg{display:block;width:100%;height:150px}.main{fill:var(--pc);stroke:var(--pc);stroke-width:2}.dark{fill:#182431;stroke:var(--pc);stroke-width:2}.line{fill:none;stroke:var(--pc);stroke-width:5;stroke-linecap:round}.thin{fill:none;stroke:#d7e9f4;stroke-width:2;stroke-linecap:round}</style>" + svg, height=150, scrolling=False)
+            # Generate the fixed 2D projection from the exact same scene builder.
+            components.html(build_3d_html(parts, option_selection, active_part, preview=True, flat=True), height=180, scrolling=False)
             st.markdown(f"<div class='option-name'>{html.escape(option['label'])}</div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
             if selections[active_part] == option_key:
                 st.markdown("<div class='installed'>장착 중 ✓</div>", unsafe_allow_html=True)
