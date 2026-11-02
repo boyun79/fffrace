@@ -433,8 +433,53 @@ window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeigh
 
 
 def build_part_preview_html(parts, selections, active_part):
-    """완성 차량의 실제 메시를 그대로 분리해 보여 줍니다."""
-    return build_3d_html(parts, selections, active_part, preview=True)
+    """독립 부품 조립 모델. 전체 차량 장면을 생성하거나 잘라내지 않습니다."""
+    option=parts[active_part]["options"][selections[active_part]]
+    cfg={"key":active_part,"variant":list(parts[active_part]["options"]).index(selections[active_part]),"shape":option["shape"],"color":option["color"]}
+    template="""<!doctype html><html><head><meta charset="utf-8"><style>html,body,#app{margin:0;width:100%;height:100%;overflow:hidden;background:#101720}canvas{display:block}</style>
+    <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.170.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.170.0/examples/jsm/"}}</script></head><body><div id="app"></div><script type="module">
+    import * as T from 'three';import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+    const cfg=__CONFIG__,v=cfg.variant,f=cfg.shape,app=document.getElementById('app');
+    const scene=new T.Scene(),model=new T.Group();scene.add(model);
+    const renderer=new T.WebGLRenderer({antialias:true});renderer.setClearColor(0x101720);renderer.setPixelRatio(Math.min(devicePixelRatio,2));app.appendChild(renderer.domElement);
+    const camera=new T.PerspectiveCamera(38,1,.01,200),controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;
+    scene.add(new T.HemisphereLight(0xffffff,0x394657,2.5));const light=new T.DirectionalLight(0xffffff,3);light.position.set(3,5,6);scene.add(light);
+    const material=new T.MeshStandardMaterial({color:cfg.color,metalness:.6,roughness:.3}),dark=new T.MeshStandardMaterial({color:0x252e38,metalness:.7,roughness:.4});
+    function mesh(geometry,mat=material,pos=[0,0,0],rotation=[0,0,0]){const m=new T.Mesh(geometry,mat);m.position.set(...pos);m.rotation.set(...rotation);model.add(m);return m}
+    function rod(a,b,r=.055){const x=new T.Vector3(...a),y=new T.Vector3(...b),d=y.clone().sub(x);const m=mesh(new T.CylinderGeometry(r,r,d.length(),16),material,x.clone().add(y).multiplyScalar(.5).toArray());m.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d.normalize())}
+    if(cfg.key==='brakes'){
+      const r=.38-v*.055;mesh(new T.CylinderGeometry(r,r,.07,48),dark,[0,0,0],[Math.PI/2,0,0]);
+      mesh(new T.TorusGeometry(r*.78,.018,8,48),material);
+      mesh(new T.CylinderGeometry(r*.32,r*.32,.10,32),material,[0,0,0],[Math.PI/2,0,0]);
+      mesh(new T.BoxGeometry(r*.46,r*1.12,.16),material,[r*.82,0,.045]);
+      for(let i=0;i<12;i++){const t=i*Math.PI/6;mesh(new T.CylinderGeometry(.012,.012,.004,8),dark,[Math.cos(t)*r*.68,Math.sin(t)*r*.68,.039],[Math.PI/2,0,0])}
+    }else if(cfg.key==='tyres'){
+      mesh(new T.TorusGeometry(.56,.56*(.43-v*.045),18+v*5,42),new T.MeshStandardMaterial({color:0x08090b,roughness:.58+v*.1}));
+      mesh(new T.TorusGeometry(.56*.99,.035,8,48),material,[0,0,.56*(.43-v*.045)]);
+    }else if(cfg.key==='suspension'){
+      const hub=[.95,0,0],r=.055-v*.007;
+      [[0,-.2,-.48],[0,-.2,.48],[0,.33,-.30],[0,.33,.30],[0,.56,0]].forEach((a,i)=>rod(a,hub,r*(i===4?.82:i>1?.9:1)));
+      mesh(new T.SphereGeometry(.12,16,10),material,hub);
+    }else if(cfg.key==='front_wing'||cfg.key==='rear_wing'){
+      const front=cfg.key==='front_wing',length=(front?3.2:2.55)*f,n=front?2+v:2+v;
+      for(let i=0;i<n;i++)mesh(new T.CapsuleGeometry(front?.11:.12,length,6,20),material,[0,i*.22,-i*.22],[0,0,Math.PI/2]);
+      [-1,1].forEach(sign=>mesh(new T.BoxGeometry(.06,.7,.7),material,[sign*(length/2+.1),.2,-.2]));
+    }else if(cfg.key==='floor'){
+      const shape=new T.Shape().moveTo(-1.25,-2.7).lineTo(-1.25,1.4).lineTo(-.8,2.8).lineTo(.8,2.8).lineTo(1.25,1.4).lineTo(1.25,-2.7).closePath();
+      mesh(new T.ExtrudeGeometry(shape,{depth:.09,bevelEnabled:true,bevelSize:.04,bevelThickness:.03}),material,[0,0,0],[Math.PI/2,0,0]);
+    }else if(cfg.key==='diffuser'){
+      [-.72,-.24,.24,.72].forEach(x=>mesh(new T.BoxGeometry(.055,.7,1.35*f),material,[x,0,0],[.38,0,0]));
+    }else if(cfg.key==='engine'){
+      mesh(new T.CapsuleGeometry(.50-v*.06,1.45-v*.12,8,18),material,[0,0,0],[Math.PI/2,0,0]);
+    }else if(cfg.key==='ers')mesh(new T.TorusGeometry(.30-v*.035,.075-v*.01,10,28+v*8),material);
+    const bounds=new T.Box3().setFromObject(model),center=bounds.getCenter(new T.Vector3()),size=bounds.getSize(new T.Vector3());model.position.sub(center);
+    const radius=Math.max(size.length()/2,.1);controls.target.set(0,0,0);controls.minDistance=radius*1.2;controls.maxDistance=radius*12;
+    function resize(){const w=Math.max(app.clientWidth,1),h=Math.max(app.clientHeight,1);renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix()}
+    resize();const angle=Math.min(camera.fov*Math.PI/360,Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect));
+    camera.position.copy(new T.Vector3(.6,.4,1.5).normalize().multiplyScalar(radius/Math.sin(angle)*1.12));camera.lookAt(0,0,0);window.addEventListener('resize',resize);
+    function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)}animate();
+    </script></body></html>"""
+    return template.replace("__CONFIG__",json.dumps(cfg))
 
 
 def render_part_description(active_part, parts):
@@ -523,7 +568,7 @@ def render_part_menu(parts, active_part):
     """왼쪽 메뉴는 파츠 선택과 클릭형 물음표 설명만 담당합니다."""
     st.markdown("<div class='section-label'>01 / PARTS</div>", unsafe_allow_html=True)
     selected_rules = "".join(
-        f"div.st-key-part_choice_{key} button{{background:#174354!important;border:3px solid #27d6ff!important;color:#edfcff!important;box-shadow:0 0 0 1px #27d6ff55!important}}"
+        f"div.st-key-part_choice_{key} button, div.st-key-part_choice_{key} button:hover, div.st-key-part_choice_{key} button:focus{{background:#174354!important;border:3px solid #27d6ff!important;color:#edfcff!important;box-shadow:0 0 0 1px #27d6ff55!important}}"
         for key in parts if key == active_part
     )
     st.markdown(f"<style>{selected_rules}</style>", unsafe_allow_html=True)
@@ -564,10 +609,12 @@ def render_option_svg(part_key, variant, color):
     elif part_key == "rear_wing":
         body = "".join(f'<path class="main" d="M{42-v*8} {38+i*17} Q100 {25+i*14-v*3} {158+v*8} {38+i*17} L{155+v*8} {48+i*17} Q100 {37+i*14} {45-v*8} {48+i*17}Z"/>' for i in range(1+v)) + '<path class="line" d="M50 35v65M150 35v65"/>'
     elif part_key == "tyres":
-        grooves="".join(f'<path class="thin" d="M{64+i*12} 30l-8 60"/>' for i in range(3+v*2)); body=f'<ellipse class="dark" cx="100" cy="62" rx="{38-v*3}" ry="50"/><ellipse class="main" cx="100" cy="62" rx="{20-v*2}" ry="31"/>{grooves}'
+        outer=49-v*1.5;inner=20+v*1.5
+        body=f'<circle cx="100" cy="62" r="{outer}" fill="#12161c" stroke="#8694a4" stroke-width="2"/><circle cx="100" cy="62" r="{inner}" fill="#101720" stroke="#586574" stroke-width="2"/><circle cx="100" cy="62" r="38" fill="none" stroke="{color}" stroke-width="3"/>'
     elif part_key == "brakes":
         holes="".join(f'<circle cx="{100+28*((i%2)*2-1)}" cy="{38+i*12}" r="3" fill="#071018"/>' for i in range(2+v*2)); body=f'<circle class="main" cx="100" cy="62" r="{42-v*4}"/><circle class="dark" cx="100" cy="62" r="18"/>{holes}<rect class="main" x="132" y="38" width="{20+v*5}" height="48" rx="7"/>'
-    elif part_key == "suspension": body="".join(f'<path class="line" d="M{45+i*55/(1+v)} 95 L{75+i*25} 28"/>' for i in range(2+v))+f'<rect class="main" x="88" y="20" width="{24-v*3}" height="84" rx="10"/>'
+    elif part_key == "suspension":
+        body=f'<g stroke-width="{5-v*.65}"><path class="line" d="M40 24L160 65L40 104M55 40L160 65L55 88M70 16L160 65"/></g><circle class="main" cx="160" cy="65" r="10"/><circle class="dark" cx="160" cy="65" r="4"/>'
     elif part_key == "floor": body=f'<path class="main" d="M{42-v*8} 104 L{58+v*5} 18 H{142-v*5} L{158+v*8} 104Z"/>'+"".join(f'<path class="thin" d="M{76+i*24} 25v70"/>' for i in range(1+v))
     elif part_key == "diffuser": body=f'<path class="main" d="M{48-v*6} 96 L{58+v*4} 26 H{142-v*4} L{152+v*6} 96Z"/>'+"".join(f'<path class="line" d="M{62+i*(76/(2+v*2))} 32l-8 58"/>' for i in range(3+v*2))
     elif part_key == "engine": body=f'<ellipse class="main" cx="100" cy="62" rx="{56-v*5}" ry="{30+v*3}"/><circle class="dark" cx="{64+v*4}" cy="62" r="{17-v*2}"/><circle class="dark" cx="{136-v*4}" cy="62" r="{17-v*2}"/>'+"".join(f'<path class="thin" d="M{80+i*12} 35v54"/>' for i in range(1+v*2))
@@ -585,8 +632,8 @@ def render_part_options(parts, active_part, selections):
             tooltip = html.escape(option["explanation"], quote=True)
             option_selection = dict(selections)
             option_selection[active_part] = option_key
-            # Generate the fixed 2D projection from the exact same scene builder.
-            components.html(build_3d_html(parts, option_selection, active_part, preview=True, flat=True), height=180, scrolling=False)
+            svg=render_option_svg(active_part,variant,option["color"])
+            components.html("<style>html,body{margin:0;background:#101720}svg{display:block;width:100%;height:180px}.main{fill:var(--pc);stroke:var(--pc);stroke-width:2}.dark{fill:#202c38;stroke:#b9c8d8;stroke-width:2}.line{fill:none;stroke:var(--pc);stroke-width:4;stroke-linecap:round}.thin{fill:none;stroke:#c9deeb;stroke-width:2}</style>"+svg,height=180,scrolling=False)
             st.markdown(f"<div class='option-name'>{html.escape(option['label'])}</div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
             if selections[active_part] == option_key:
                 st.markdown("<div class='installed'>장착 중 ✓</div>", unsafe_allow_html=True)
