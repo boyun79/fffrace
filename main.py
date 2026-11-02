@@ -329,6 +329,9 @@ def build_3d_html(parts, selections, active_part, preview=False, flat=False):
     if preview:
         injection = """
     car.rotation.set(0,0,0);platform.visible=false;ring.visible=false;
+    // Isolate one mounted assembly without changing any geometry.
+    const representativeCount={tyres:2,brakes:1,suspension:6}[active3d];
+    if(representativeCount)activeGroup.children.slice(representativeCount).forEach(child=>activeGroup.remove(child));
     Object.entries(partGroups).forEach(([name,g])=>g.visible=(g===activeGroup));
     labels.domElement.style.display='none';
     document.getElementById('hint').style.display='none';document.getElementById('badge').style.display='none';
@@ -365,6 +368,22 @@ def build_3d_html(parts, selections, active_part, preview=False, flat=False):
             animation_start=doc.index("    function animate(t)")
             animation_end=doc.index("    </script>", animation_start)
             doc=doc[:animation_start]+"    renderer.render(scene,camera);\n"+doc[animation_end:]
+    if preview and flat:
+        # SVGRenderer uses the identical Three.js meshes without a WebGL context.
+        doc=doc.replace("    import * as THREE from 'three';", "    import * as THREE from 'three';\n    import {SVGRenderer} from 'three/addons/renderers/SVGRenderer.js';")
+        start=doc.index("    const renderer=new THREE.WebGLRenderer")
+        end=doc.index("    const labels=",start)
+        doc=doc[:start]+"""
+    const renderer=new SVGRenderer();renderer.setSize(app.clientWidth,app.clientHeight);
+    renderer.setQuality('high');renderer.setClearColor(0x101720,1);
+    app.appendChild(renderer.domElement);
+"""+doc[end:]
+        # SVGRenderer supports Lambert shading; retain mesh colour and geometry.
+        point=doc.index("    const ray=")
+        doc=doc[:point]+"""
+    scene.fog=null;
+    activeGroup.traverse(o=>{if(o.isMesh){const original=o.material;o.material=new THREE.MeshLambertMaterial({color:original.color.clone(),side:THREE.DoubleSide,opacity:original.opacity,transparent:original.transparent})}});
+"""+doc[point:]
     doc=doc.replace("d.textContent=names[n]", "d.textContent=names[n] || '차체 구조'")
     doc=doc.replace("box-shadow:0 0 8px #ff3158,0 0 24px #ff3158,0 0 42px #27d6ff", "box-shadow:none")
     doc=doc.replace("background:#35101c;border:2px solid #ff3158", "background:#102630;border:1px solid #27d6ff")
@@ -497,14 +516,14 @@ def render_advantages_and_disadvantages(parts, active_part, option_key):
 # -----------------------------------------------------------------------------
 def render_help_message():
     """처음 온 사용자가 3초 안에 조작법을 이해하도록 짧게 안내합니다."""
-    st.markdown("""<div class='intro'><strong>🏎 MY F1 CAR</strong><span>① 차량을 드래그해서 360°로 살펴보세요</span><span>② 부품을 클릭해 설정을 바꾸세요</span><span>③ 성능에 마우스를 올려 물리를 배워보세요</span></div>""", unsafe_allow_html=True)
+    st.markdown("""<div class='intro'><strong>🏎 MY F1 CAR</strong><span>① 차량을 드래그해서 360°로 살펴보세요</span><span>② 왼쪽 목록에서 부품 설정을 바꾸세요</span><span>③ 성능에 마우스를 올려 물리를 배워보세요</span></div>""", unsafe_allow_html=True)
 
 
 def render_part_menu(parts, active_part):
     """왼쪽 메뉴는 파츠 선택과 클릭형 물음표 설명만 담당합니다."""
     st.markdown("<div class='section-label'>01 / PARTS</div>", unsafe_allow_html=True)
     selected_rules = "".join(
-        f"div.st-key-part_choice_{key} div.stButton > button{{background:#143746!important;border:2px solid #27d6ff!important;color:#edfcff!important;box-shadow:0 0 0 1px #27d6ff33!important}}"
+        f"div.st-key-part_choice_{key} button{{background:#174354!important;border:3px solid #27d6ff!important;color:#edfcff!important;box-shadow:0 0 0 1px #27d6ff55!important}}"
         for key in parts if key == active_part
     )
     st.markdown(f"<style>{selected_rules}</style>", unsafe_allow_html=True)
