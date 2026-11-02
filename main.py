@@ -1,11 +1,9 @@
 from pathlib import Path
-"""F1 Racing Simulator Garage
-
-실행: streamlit run main.py
-필수 패키지: streamlit
-3D 렌더링은 Streamlit 안의 Three.js 웹 컴포넌트가 담당합니다.
-"""
-
+# F1 Racing Simulator Garage
+# 
+# 실행: streamlit run main.py
+# 필수 패키지: streamlit
+# 3D 렌더링은 Streamlit 안의 Three.js 웹 컴포넌트가 담당합니다.
 
 import html
 import json
@@ -296,24 +294,24 @@ def build_3d_html(parts, selections, active_part, preview=False, flat=False):
     doc = _build_car_scene_html(parts, selections, active_part)
     doc = doc.replace("names[hovered]", "(names[hovered] || '차체 구조')")
     doc = doc.replace("'클릭하면 설정 패널이 열립니다'", "(cfg[hovered]?.key ? '클릭하여 파츠 설정' : '별도 설정이 없는 차체 구조입니다')")
-    doc = doc.replace("m.material.emissiveIntensity=m.parent===activeGroup?2.8:1", "m.material.emissiveIntensity=m.parent===activeGroup?.35:.12")
+    doc = doc.replace("m.material.emissiveIntensity=m.parent===activeGroup?2.8:1", "m.material.emissiveIntensity=m.parent===activeGroup ? .35 : .12")
     doc = doc.replace("renderer.domElement.style.cursor='pointer'", "renderer.domElement.style.cursor=cfg[hovered]?.key?'pointer':'grab'")
     start = doc.index("    // 선택하지 않은 부분")
     end = doc.index("    const ray=", start)
     doc = doc[:start] + """
     // 공유 재질을 분리한 뒤 선택 부품만 차분하게 강조합니다.
-    Object.values(partGroups).forEach(g=>g.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.material.emissive?.setHex(g===activeGroup?0x163b45:0);o.material.emissiveIntensity=.35}}));
+    Object.values(partGroups).forEach(g=>g.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.userData.baseEmissive=o.material.emissive?.getHex() ?? 0;o.userData.baseIntensity=o.material.emissiveIntensity;o.material.emissive?.setHex(g===activeGroup?0x27d6ff:o.userData.baseEmissive);o.material.emissiveIntensity=g===activeGroup?.6:o.userData.baseIntensity}}));
     let activeBox=null,activeLight=null;
 """ + doc[end:]
     start = doc.index("    renderer.domElement.addEventListener('click'")
     end = doc.index("    window.addEventListener('resize'",start)
     doc = doc[:start] + """
     let pointerStart=null;
-    renderer.domElement.addEventListener('pointerdown',e=>{pointerStart={x:e.clientX,y:e.clientY,id:e.pointerId}});
+    renderer.domElement.addEventListener('pointerdown',e=>{if(e.button!==0||pointerStart){if(pointerStart)pointerStart.dragged=true;return;}pointerStart={x:e.clientX,y:e.clientY,id:e.pointerId,dragged:false}});
     renderer.domElement.addEventListener('pointerup',e=>{
       if(!pointerStart||e.pointerId!==pointerStart.id)return;
-      const distance=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);pointerStart=null;
-      if(distance>5)return;
+      const pointerStartDragged=pointerStart.dragged;const distance=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);pointerStart=null;
+      if(distance>5||pointerStartDragged)return;
       const object=hit(e),key=cfg[object?.userData.part]?.key;
       if(key)window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setComponentValue',value:{part:key,event:Date.now()+'-'+Math.random()},dataType:'json'},'*');
     });
@@ -321,6 +319,18 @@ def build_3d_html(parts, selections, active_part, preview=False, flat=False):
     window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},'*');
     window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:540},'*');
 """ + doc[end:]
+    hover_start = doc.index("    renderer.domElement.addEventListener('pointermove'")
+    hover_end = doc.index("    let pointerStart=null;", hover_start)
+    doc = doc[:hover_start] + """
+    renderer.domElement.addEventListener('pointermove',e=>{
+      if(pointerStart && Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y)>5)pointerStart.dragged=true;
+      const obj=hit(e);hovered=obj?.userData.part || null;
+      renderer.domElement.style.cursor=cfg[hovered]?.key?'pointer':'grab';
+      info.style.opacity=obj?1:0;
+      if(obj){info.replaceChildren();const title=document.createElement('b'),description=document.createElement('span');title.textContent=names[hovered]||'차체 구조';description.textContent=descriptions[hovered]||(cfg[hovered]?.key?'클릭하여 파츠 설정':'별도 설정이 없는 차체 구조입니다');info.append(title,description)}
+    });
+""" + doc[hover_end:]
+    doc = doc.replace('o.material.emissiveIntensity=2.5*pulse', 'o.material.emissiveIntensity=.65*pulse')
     if preview:
         injection = """
     car.rotation.set(0,0,0);platform.visible=false;ring.visible=false;
@@ -364,8 +374,24 @@ def render_3d_car(parts, selections, active_part):
         st.session_state["garage_viewer_folder"] = folder
     target = Path(folder, "index.html")
     document = build_3d_html(parts, selections, active_part)
-    if not target.exists() or target.read_text(encoding="utf-8") != document:
-        target.write_text(document, encoding="utf-8")
+    bootstrap = """<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;overflow:hidden"><iframe id="scene" title="3D 차량 파츠 선택" style="border:0;width:100%;height:540px;display:block"></iframe>
+<script>
+const scene=document.getElementById('scene');let lastDocument=null;
+window.addEventListener('message',event=>{
+ const message=event.data;
+ if(event.source===window.parent && message?.type==='streamlit:render'){
+  const document=message.args?.document;
+  if(typeof document==='string' && document!==lastDocument){lastDocument=document;scene.srcdoc=document;}
+ }else if(event.source===scene.contentWindow && message?.isStreamlitMessage && message.type==='streamlit:setComponentValue'){
+  window.parent.postMessage(message,'*');
+ }
+});
+window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},'*');
+window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:540},'*');
+</script></body></html>"""
+    if not target.exists() or target.read_text(encoding="utf-8") != bootstrap:
+        target.write_text(bootstrap, encoding="utf-8")
     module_name = "garage_viewer_registration"
     module = sys.modules.get(module_name)
     if module is None:
@@ -374,10 +400,11 @@ def render_3d_car(parts, selections, active_part):
         module.__spec__ = importlib.machinery.ModuleSpec(module_name, loader=None)
         sys.modules[module_name] = module
         exec(compile("import streamlit.components.v1 as components\ndef declare(folder):\n return components.declare_component('garage_parts',path=folder)\n", module.__file__, "exec"), module.__dict__)
-    event = module.declare(folder)(key="garage_part_picker", default=None)
+    event = module.declare(folder)(document=document, key="garage_part_picker", default=None)
     if isinstance(event, dict) and event.get("part") in parts and event.get("event") != st.session_state.get("garage_last_pick"):
         st.session_state["garage_last_pick"] = event["event"]
         st.session_state.active_part = event["part"]
+        st.session_state.open_part_info = None
         st.query_params.pop("part", None)
         st.rerun()
 
@@ -472,10 +499,11 @@ def render_help_message():
 def render_part_menu(parts, active_part):
     """왼쪽 메뉴는 파츠 선택과 클릭형 물음표 설명만 담당합니다."""
     st.markdown("<div class='section-label'>01 / PARTS</div>", unsafe_allow_html=True)
+    st.markdown("<style>div[class*='st-key-menu_'] button[kind='primary']{background:#102d38!important;border:1px solid #27d6ff!important;color:#dffaff!important;box-shadow:none!important}</style>", unsafe_allow_html=True)
     for key, data in parts.items():
         part_column, info_column = st.columns([5, 1], gap="small")
         with part_column:
-            if st.button(f"{data['icon']}   {data['name']}", key=f"menu_{key}", use_container_width=True):
+            if st.button(f"{data['icon']}   {data['name']}", key=f"menu_{key}", type="primary" if key == active_part else "secondary", use_container_width=True):
                 st.session_state.active_part = key
                 # 다른 파츠를 고르면 이전 설명창은 자연스럽게 닫습니다.
                 st.session_state.open_part_info = None
