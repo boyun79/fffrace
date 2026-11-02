@@ -219,7 +219,7 @@ def _build_car_scene_html(parts, selections, active_part):
     import * as THREE from 'three';
     import {{OrbitControls}} from 'three/addons/controls/OrbitControls.js';
     import {{CSS2DRenderer,CSS2DObject}} from 'three/addons/renderers/CSS2DRenderer.js';
-    const cfg={json.dumps(visual, ensure_ascii=False)}, active='{active_part}';
+    const cfg={json.dumps(visual, ensure_ascii=False)};let active='{active_part}';
     const app=document.getElementById('app'), scene=new THREE.Scene();
     scene.fog=new THREE.Fog(0x080b10,16,34);
     const camera=new THREE.PerspectiveCamera(38,app.clientWidth/app.clientHeight,.1,100);camera.position.set(10,6.5,12);
@@ -273,7 +273,7 @@ def _build_car_scene_html(parts, selections, active_part):
     const labelAnchors=new THREE.Group();car.add(labelAnchors);
     Object.entries(labelPos).forEach(([n,p])=>{{const anchor=new THREE.Object3D();anchor.position.set(...p);labelAnchors.add(anchor);const d=document.createElement('div');d.className='label'+(cfg[n]?.key===active?' active':'');d.textContent=names[n];const l=new CSS2DObject(d);l.position.set(0,0,0);anchor.add(l)}});
     // 왼쪽에서 선택한 파츠는 차량에서도 계속 빛나도록 해 프리뷰와 위치를 연결합니다.
-    const active3d=Object.keys(cfg).find(n=>cfg[n]?.key===active), activeGroup=partGroups[active3d];
+    let active3d=Object.keys(cfg).find(n=>cfg[n]?.key===active), activeGroup=partGroups[active3d];
     // 선택하지 않은 부분은 살짝 어둡게 하고, 선택 파츠에는 강한 발광·와이어 박스·점광원을 더합니다.
     Object.entries(partGroups).forEach(([name,g])=>g.traverse(o=>{{if(o.isMesh){{o.material=o.material.clone();if(g!==activeGroup){{o.material.color.multiplyScalar(.62);o.material.opacity=.82;o.material.transparent=true}}}}}}));
     let activeBox=null, activeLight=null;
@@ -302,6 +302,14 @@ def build_3d_html(parts, selections, active_part, preview=False, flat=False):
     // 공유 재질을 분리한 뒤 선택 부품만 차분하게 강조합니다.
     Object.values(partGroups).forEach(g=>g.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.userData.baseEmissive=o.material.emissive?.getHex() ?? 0;o.userData.baseIntensity=o.material.emissiveIntensity;o.material.emissive?.setHex(g===activeGroup?0x27d6ff:o.userData.baseEmissive);o.material.emissiveIntensity=g===activeGroup?.6:o.userData.baseIntensity}}));
     let activeBox=null,activeLight=null;
+    function selectPart(key){
+      if(!Object.values(cfg).some(value=>value.key===key))return;
+      active=key;active3d=Object.keys(cfg).find(name=>cfg[name].key===key);activeGroup=partGroups[active3d];
+      Object.values(partGroups).forEach(g=>g.traverse(o=>{if(o.isMesh){o.material.emissive?.setHex(g===activeGroup?0x27d6ff:o.userData.baseEmissive);o.material.emissiveIntensity=g===activeGroup?.65:o.userData.baseIntensity}}));
+      labelAnchors.children.forEach((anchor,index)=>{const name=Object.keys(labelPos)[index];anchor.children.forEach(label=>label.element?.classList.toggle('active',cfg[name]?.key===active))});
+    }
+    window.addEventListener('message',event=>{if(event.source===window.parent&&event.data?.type==='garage:select')selectPart(event.data.part)});
+    window.parent.postMessage({type:'garage:ready'},'*');
 """ + doc[end:]
     start = doc.index("    renderer.domElement.addEventListener('click'")
     end = doc.index("    window.addEventListener('resize'",start)
@@ -313,7 +321,7 @@ def build_3d_html(parts, selections, active_part, preview=False, flat=False):
       const pointerStartDragged=pointerStart.dragged;const distance=Math.hypot(e.clientX-pointerStart.x,e.clientY-pointerStart.y);pointerStart=null;
       if(distance>5||pointerStartDragged)return;
       const object=hit(e),key=cfg[object?.userData.part]?.key;
-      if(key)window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setComponentValue',value:{part:key,event:Date.now()+'-'+Math.random()},dataType:'json'},'*');
+      if(key){selectPart(key);window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setComponentValue',value:{part:key,event:Date.now()+'-'+Math.random()},dataType:'json'},'*');}
     });
     renderer.domElement.addEventListener('pointercancel',()=>pointerStart=null);
     window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},'*');
@@ -377,12 +385,14 @@ def render_3d_car(parts, selections, active_part):
     bootstrap = """<!doctype html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;overflow:hidden"><iframe id="scene" title="3D 차량 파츠 선택" style="border:0;width:100%;height:540px;display:block"></iframe>
 <script>
-const scene=document.getElementById('scene');let lastDocument=null;
+const scene=document.getElementById('scene');let lastModel=null,currentPart=null;
+function syncSelection(){scene.contentWindow.postMessage({type:'garage:select',part:currentPart},'*')}
 window.addEventListener('message',event=>{
  const message=event.data;
  if(event.source===window.parent && message?.type==='streamlit:render'){
-  const document=message.args?.document;
-  if(typeof document==='string' && document!==lastDocument){lastDocument=document;scene.srcdoc=document;}
+  const document=message.args?.document,model=message.args?.model;currentPart=message.args?.active_part;
+  if(typeof document==='string' && model!==lastModel){lastModel=model;scene.srcdoc=document;}else{syncSelection();}
+ }else if(event.source===scene.contentWindow && message?.type==='garage:ready'){syncSelection();
  }else if(event.source===scene.contentWindow && message?.isStreamlitMessage && message.type==='streamlit:setComponentValue'){
   window.parent.postMessage(message,'*');
  }
@@ -400,7 +410,7 @@ window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeigh
         module.__spec__ = importlib.machinery.ModuleSpec(module_name, loader=None)
         sys.modules[module_name] = module
         exec(compile("import streamlit.components.v1 as components\ndef declare(folder):\n return components.declare_component('garage_parts',path=folder)\n", module.__file__, "exec"), module.__dict__)
-    event = module.declare(folder)(document=document, key="garage_part_picker", default=None)
+    event = module.declare(folder)(document=document, model=json.dumps(selections, sort_keys=True), active_part=active_part, key="garage_part_picker", default=None)
     if isinstance(event, dict) and event.get("part") in parts and event.get("event") != st.session_state.get("garage_last_pick"):
         st.session_state["garage_last_pick"] = event["event"]
         st.session_state.active_part = event["part"]
@@ -499,11 +509,15 @@ def render_help_message():
 def render_part_menu(parts, active_part):
     """왼쪽 메뉴는 파츠 선택과 클릭형 물음표 설명만 담당합니다."""
     st.markdown("<div class='section-label'>01 / PARTS</div>", unsafe_allow_html=True)
-    st.markdown("<style>div[class*='st-key-menu_'] button[kind='primary']{background:#102d38!important;border:1px solid #27d6ff!important;color:#dffaff!important;box-shadow:none!important}</style>", unsafe_allow_html=True)
+    selected_rules = "".join(
+        f".st-key-menu_{key} button{{background:#102d38!important;border:1px solid #27d6ff!important;color:#dffaff!important;box-shadow:none!important}}"
+        for key in parts if key == active_part
+    )
+    st.markdown(f"<style>{selected_rules}</style>", unsafe_allow_html=True)
     for key, data in parts.items():
         part_column, info_column = st.columns([5, 1], gap="small")
         with part_column:
-            if st.button(f"{data['icon']}   {data['name']}", key=f"menu_{key}", type="primary" if key == active_part else "secondary", use_container_width=True):
+            if st.button(f"{'▸ ' if key == active_part else ''}{data['icon']}   {data['name']}", key=f"menu_{key}", type="primary" if key == active_part else "secondary", use_container_width=True):
                 st.session_state.active_part = key
                 # 다른 파츠를 고르면 이전 설명창은 자연스럽게 닫습니다.
                 st.session_state.open_part_info = None
@@ -558,7 +572,9 @@ def render_part_options(parts, active_part, selections):
             tooltip = html.escape(option["explanation"], quote=True)
             option_selection = dict(selections)
             option_selection[active_part] = option_key
-            components.html(build_3d_html(parts, option_selection, active_part, preview=True, flat=True), height=150, scrolling=False)
+            # 기존 SVG 생성기를 재사용하므로 WebGL 초기화 없이 2D 형상이 표시됩니다.
+            svg = render_option_svg(active_part, variant, option["color"])
+            components.html("<style>html,body{margin:0;background:#101720}svg{display:block;width:100%;height:150px}.main{fill:var(--pc);stroke:var(--pc);stroke-width:2}.dark{fill:#182431;stroke:var(--pc);stroke-width:2}.line{fill:none;stroke:var(--pc);stroke-width:5;stroke-linecap:round}.thin{fill:none;stroke:#d7e9f4;stroke-width:2;stroke-linecap:round}</style>" + svg, height=150, scrolling=False)
             st.markdown(f"<div class='option-name'>{html.escape(option['label'])}</div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
             if selections[active_part] == option_key:
                 st.markdown("<div class='installed'>장착 중 ✓</div>", unsafe_allow_html=True)
