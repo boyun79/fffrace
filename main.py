@@ -1,13 +1,12 @@
-from pathlib import Path
-# F1 Racing Simulator Garage
-# 
-# 실행: streamlit run main.py
-# 필수 패키지: streamlit
-# 3D 렌더링은 Streamlit 안의 Three.js 웹 컴포넌트가 담당합니다.
+"""F1 Racing Simulator Garage
+
+실행: streamlit run main.py
+필수 패키지: streamlit
+3D 렌더링은 Streamlit 안의 Three.js 웹 컴포넌트가 담당합니다.
+"""
 
 import html
 import json
-import re
 from copy import deepcopy
 
 import streamlit as st
@@ -173,28 +172,13 @@ def apply_game_css():
     .part-role{padding:10px 12px;margin:0 0 11px;background:#0c131b;border-left:3px solid var(--cyan);color:#d3dde6;font-size:12px;line-height:1.55}.part-role b{font:700 15px 'Oxanium';color:#fff}.part-role span{color:#91a0af}
     .preview-shell{border:1px solid #2b3744;background:linear-gradient(135deg,#101821,#080c11);margin-top:10px;box-shadow:0 12px 35px #0006}.preview-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #283441}.preview-title{font:700 12px 'Oxanium';letter-spacing:2px}.preview-current{font:700 12px 'Oxanium';color:#ffbd32}.proscons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.pros,.cons{padding:10px;background:#0c1218;border:1px solid #26313d;font-size:11px;line-height:1.7}.pros b{color:#37eca0}.cons b{color:#ff7387}.change-table{margin:10px 0;border:1px solid #293542;background:#0b1016}.change-row{display:grid;grid-template-columns:1.35fr .8fr .8fr .65fr;padding:7px 9px;border-bottom:1px solid #202a34;font:600 11px 'Oxanium'}.change-row:last-child{border-bottom:0}.result-line{padding:12px;background:linear-gradient(90deg,#17251f,#10161d);border:1px solid #2b5947;color:#d8f7e9;font-size:12px;line-height:1.6}.flow-arrow{text-align:center;color:#27d6ff;font:700 18px 'Oxanium';margin:-3px 0 1px}
     @media(max-width:1000px){.intro{flex-wrap:wrap}.block-container{padding:.6rem}.garage-head{position:static}}
-    
-/* 설계 화면과 같은 이동 버튼. 긴 문구는 잘리지 않고 줄바꿈합니다. */
-.stApp div[data-testid="stButton"] button {
- background:#10161e!important;background-image:none!important;color:#f4f7fb!important;
- -webkit-text-fill-color:#f4f7fb!important;border:1px solid #354252!important;
- border-radius:4px!important;min-height:44px!important;padding:10px 12px!important;
- font-family:'Noto Sans KR',sans-serif!important;font-size:14px!important;font-weight:700!important;
- line-height:1.5!important;white-space:normal!important;height:auto!important;box-sizing:border-box;
-}
-.stApp div[data-testid="stButton"] button * {color:inherit!important;-webkit-text-fill-color:inherit!important;white-space:normal!important;overflow-wrap:anywhere;line-height:1.5!important;font-size:14px!important}
-.stApp div[data-testid="stButton"] button:hover {background:#172631!important;border-color:#27d6ff!important}
-.stApp div[data-testid="stButton"] button:focus-visible {border-color:#ff3158!important;outline:2px solid #ff315866;outline-offset:2px}
-@media(max-width:760px){[data-testid="stHorizontalBlock"]:has([data-testid="stButton"]) {flex-wrap:wrap!important;gap:.5rem!important}
-[data-testid="stHorizontalBlock"]:has([data-testid="stButton"])>[data-testid="stColumn"] {min-width:min(100%,250px)!important;flex:1 1 250px!important}}
-
-</style>""", unsafe_allow_html=True)
+    </style>""", unsafe_allow_html=True)
 
 
 # -----------------------------------------------------------------------------
 # 4. 실제 WebGL 3D 차량
 # -----------------------------------------------------------------------------
-def _build_car_scene_html(parts, selections, active_part):
+def build_3d_html(parts, selections, active_part):
     """Three.js로 회전·확대·레이캐스팅이 가능한 3D F1 차량을 만듭니다.
 
     차량은 평면 이미지가 아니라 여러 개의 곡면 3D 메시로 구성됩니다. 각 메시에는
@@ -219,7 +203,7 @@ def _build_car_scene_html(parts, selections, active_part):
     import * as THREE from 'three';
     import {{OrbitControls}} from 'three/addons/controls/OrbitControls.js';
     import {{CSS2DRenderer,CSS2DObject}} from 'three/addons/renderers/CSS2DRenderer.js';
-    const cfg={json.dumps(visual, ensure_ascii=False)};let active='{active_part}';
+    const cfg={json.dumps(visual, ensure_ascii=False)}, active='{active_part}';
     const app=document.getElementById('app'), scene=new THREE.Scene();
     scene.fog=new THREE.Fog(0x080b10,16,34);
     const camera=new THREE.PerspectiveCamera(38,app.clientWidth/app.clientHeight,.1,100);camera.position.set(10,6.5,12);
@@ -273,7 +257,7 @@ def _build_car_scene_html(parts, selections, active_part):
     const labelAnchors=new THREE.Group();car.add(labelAnchors);
     Object.entries(labelPos).forEach(([n,p])=>{{const anchor=new THREE.Object3D();anchor.position.set(...p);labelAnchors.add(anchor);const d=document.createElement('div');d.className='label'+(cfg[n]?.key===active?' active':'');d.textContent=names[n];const l=new CSS2DObject(d);l.position.set(0,0,0);anchor.add(l)}});
     // 왼쪽에서 선택한 파츠는 차량에서도 계속 빛나도록 해 프리뷰와 위치를 연결합니다.
-    let active3d=Object.keys(cfg).find(n=>cfg[n]?.key===active), activeGroup=partGroups[active3d];
+    const active3d=Object.keys(cfg).find(n=>cfg[n]?.key===active), activeGroup=partGroups[active3d];
     // 선택하지 않은 부분은 살짝 어둡게 하고, 선택 파츠에는 강한 발광·와이어 박스·점광원을 더합니다.
     Object.entries(partGroups).forEach(([name,g])=>g.traverse(o=>{{if(o.isMesh){{o.material=o.material.clone();if(g!==activeGroup){{o.material.color.multiplyScalar(.62);o.material.opacity=.82;o.material.transparent=true}}}}}}));
     let activeBox=null, activeLight=null;
@@ -287,199 +271,84 @@ def _build_car_scene_html(parts, selections, active_part):
     </script></body></html>"""
 
 
-def build_3d_html(parts, selections, active_part, preview=False, flat=False):
-    selections = {k: selections.get(k) if selections.get(k) in d["options"] else list(d["options"])[1] for k, d in parts.items()}
-    if active_part not in parts:
-        active_part = next(iter(parts))
-    doc = _build_car_scene_html(parts, selections, active_part)
-    doc = doc.replace("names[hovered]", "(names[hovered] || '차체 구조')")
-    doc = doc.replace("'클릭하면 설정 패널이 열립니다'", "(cfg[hovered]?.key ? '클릭하여 파츠 설정' : '별도 설정이 없는 차체 구조입니다')")
-    doc = doc.replace("m.material.emissiveIntensity=m.parent===activeGroup?2.8:1", "m.material.emissiveIntensity=m.parent===activeGroup ? .35 : .12")
-    doc = doc.replace("renderer.domElement.style.cursor='pointer'", "renderer.domElement.style.cursor=cfg[hovered]?.key?'pointer':'grab'")
-    start = doc.index("    // 선택하지 않은 부분")
-    end = doc.index("    const ray=", start)
-    doc = doc[:start] + """
-    // 공유 재질을 분리한 뒤 선택 부품만 차분하게 강조합니다.
-    Object.values(partGroups).forEach(g=>g.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.userData.baseEmissive=o.material.emissive?.getHex() ?? 0;o.userData.baseIntensity=o.material.emissiveIntensity;o.material.emissive?.setHex(g===activeGroup?0x27d6ff:o.userData.baseEmissive);o.material.emissiveIntensity=g===activeGroup?.6:o.userData.baseIntensity}}));
-    let activeBox=null,activeLight=null;
-    function selectPart(key){
-      if(!Object.values(cfg).some(value=>value.key===key))return;
-      active=key;active3d=Object.keys(cfg).find(name=>cfg[name].key===key);activeGroup=partGroups[active3d];
-      Object.values(partGroups).forEach(g=>g.traverse(o=>{if(o.isMesh){o.material.emissive?.setHex(g===activeGroup?0x27d6ff:o.userData.baseEmissive);o.material.emissiveIntensity=g===activeGroup?.65:o.userData.baseIntensity}}));
-      labelAnchors.children.forEach((anchor,index)=>{const name=Object.keys(labelPos)[index];anchor.children.forEach(label=>label.element?.classList.toggle('active',cfg[name]?.key===active))});
-    }
-    window.addEventListener('message',event=>{if(event.source===window.parent&&event.data?.type==='garage:select')selectPart(event.data.part)});
-    window.parent.postMessage({type:'garage:ready'},'*');
-""" + doc[end:]
-    # Remove only the old selection listener; OrbitControls owns camera input.
-    start = doc.index("    renderer.domElement.addEventListener('click'")
-    end = doc.index("    window.addEventListener('resize'", start)
-    doc = doc[:start] + doc[end:]
-    start = doc.index("    renderer.domElement.addEventListener('pointermove'")
-    end = doc.index("    window.addEventListener('resize'", start)
-    doc = doc[:start] + """
-    renderer.domElement.addEventListener('pointermove',e=>{
-      const obj=hit(e);hovered=obj?.userData.part||null;
-      renderer.domElement.style.cursor='grab';info.style.opacity=obj?1:0;
-      if(obj){info.replaceChildren();const title=document.createElement('b'),description=document.createElement('span');title.textContent=names[hovered]||'차체 구조';description.textContent=descriptions[hovered]||'왼쪽 목록에서 파츠를 선택하세요';info.append(title,description)}
-    });
-""" + doc[end:]
-    doc=doc.replace(' · PART 클릭', ' · 왼쪽 목록에서 파츠 선택')
-    doc = doc.replace('o.material.emissiveIntensity=2.5*pulse', 'o.material.emissiveIntensity=.65*pulse')
-    if preview:
-        injection = """
-    car.rotation.set(0,0,0);platform.visible=false;ring.visible=false;
-    // Isolate one mounted assembly without changing any geometry.
-    const representativeCount={tyres:2,brakes:1,suspension:6}[active3d];
-    if(representativeCount)activeGroup.children.slice(representativeCount).forEach(child=>activeGroup.remove(child));
-    Object.entries(partGroups).forEach(([name,g])=>g.visible=(g===activeGroup));
-    labels.domElement.style.display='none';
-    document.getElementById('hint').style.display='none';document.getElementById('badge').style.display='none';
-    const bounds=new THREE.Box3().setFromObject(activeGroup),center=new THREE.Vector3(),size=new THREE.Vector3();bounds.getCenter(center);bounds.getSize(size);
-    controls.target.copy(center);controls.autoRotate=false;
-    const radius=Math.max(size.x,size.y,size.z,.5);
-    camera.position.copy(center).add(new THREE.Vector3(1,.8,1.4).normalize().multiplyScalar(radius*2.3));
-    controls.minDistance=radius*.8;controls.maxDistance=radius*5;camera.lookAt(center);
-"""
-        if flat:
-            injection += """
-    // Same mesh/option data as the upper preview; fixed orthographic 2D image.
-    const ortho=new THREE.OrthographicCamera(-1,1,1,-1,.01,100);
-    const viewDirection=new THREE.Vector3(1,.8,1.4).normalize();
-    ortho.position.copy(center).addScaledVector(viewDirection,20);ortho.lookAt(center);ortho.updateMatrixWorld(true);
-    function fitProjection(){
-      const ratio=Math.max(app.clientWidth,1)/Math.max(app.clientHeight,1);
-      let maxX=0,maxY=0;
-      for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
-        const point=new THREE.Vector3(x,y,z).applyMatrix4(ortho.matrixWorldInverse);
-        maxX=Math.max(maxX,Math.abs(point.x));maxY=Math.max(maxY,Math.abs(point.y));
-      }
-      const halfHeight=Math.max(maxY,maxX/ratio,.05)*1.12;
-      ortho.left=-halfHeight*ratio;ortho.right=halfHeight*ratio;ortho.top=halfHeight;ortho.bottom=-halfHeight;ortho.updateProjectionMatrix();
-    }
-    fitProjection();controls.enabled=false;
-    // Static projections retain original materials rather than selection emission.
-    activeGroup.traverse(o=>{if(o.isMesh){o.material.emissive?.setHex(o.userData.baseEmissive);o.material.emissiveIntensity=o.userData.baseIntensity}});
-    renderer.render=function(sc,cam){THREE.WebGLRenderer.prototype.render.call(renderer,sc,ortho)};
-    window.addEventListener('resize',()=>{fitProjection();renderer.render(scene,ortho)});
-"""
-        doc=doc.replace("    const ray=", injection+"    const ray=",1)
-        if flat:
-            animation_start=doc.index("    function animate(t)")
-            animation_end=doc.index("    </script>", animation_start)
-            doc=doc[:animation_start]+"    renderer.render(scene,camera);\n"+doc[animation_end:]
-    if preview and flat:
-        # SVGRenderer uses the identical Three.js meshes without a WebGL context.
-        doc=doc.replace("    import * as THREE from 'three';", "    import * as THREE from 'three';\n    import {SVGRenderer} from 'three/addons/renderers/SVGRenderer.js';")
-        start=doc.index("    const renderer=new THREE.WebGLRenderer")
-        end=doc.index("    const labels=",start)
-        doc=doc[:start]+"""
-    const renderer=new SVGRenderer();renderer.setSize(app.clientWidth,app.clientHeight);
-    renderer.setQuality('high');renderer.setClearColor(0x101720,1);
-    app.appendChild(renderer.domElement);
-"""+doc[end:]
-        # SVGRenderer supports Lambert shading; retain mesh colour and geometry.
-        point=doc.index("    const ray=")
-        doc=doc[:point]+"""
-    scene.fog=null;
-    activeGroup.traverse(o=>{if(o.isMesh){const original=o.material;o.material=new THREE.MeshLambertMaterial({color:original.color.clone(),side:THREE.DoubleSide,opacity:original.opacity,transparent:original.transparent})}});
-"""+doc[point:]
-    doc=doc.replace("d.textContent=names[n]", "d.textContent=names[n] || '차체 구조'")
-    doc=doc.replace("box-shadow:0 0 8px #ff3158,0 0 24px #ff3158,0 0 42px #27d6ff", "box-shadow:none")
-    doc=doc.replace("background:#35101c;border:2px solid #ff3158", "background:#102630;border:1px solid #27d6ff")
-    return doc
-
-
 def render_3d_car(parts, selections, active_part):
-    """정식 컴포넌트 값으로 선택을 전달하여 세션을 유지합니다."""
-    import tempfile
-    import sys
-    import types
-    import importlib.machinery
-    folder = st.session_state.get("garage_viewer_folder")
-    if not folder or not Path(folder).is_dir():
-        folder = tempfile.mkdtemp(prefix="f1_garage_")
-        st.session_state["garage_viewer_folder"] = folder
-    target = Path(folder, "index.html")
-    document = build_3d_html(parts, selections, active_part)
-    bootstrap = """<!doctype html><html><head><meta charset="utf-8"></head>
-<body style="margin:0;overflow:hidden"><iframe id="scene" title="3D 차량 보기" style="border:0;width:100%;height:540px;display:block"></iframe>
-<script>
-const scene=document.getElementById('scene');let lastModel=null,currentPart=null;
-function syncSelection(){scene.contentWindow.postMessage({type:'garage:select',part:currentPart},'*')}
-window.addEventListener('message',event=>{
- const message=event.data;
- if(event.source===window.parent && message?.type==='streamlit:render'){
-  const document=message.args?.document,model=message.args?.model;currentPart=message.args?.active_part;
-  if(typeof document==='string' && model!==lastModel){lastModel=model;scene.srcdoc=document;}else{syncSelection();}
- }else if(event.source===scene.contentWindow && message?.type==='garage:ready'){syncSelection();
- }
-});
-window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},'*');
-window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:540},'*');
-</script></body></html>"""
-    if not target.exists() or target.read_text(encoding="utf-8") != bootstrap:
-        target.write_text(bootstrap, encoding="utf-8")
-    module_name = "garage_viewer_registration"
-    module = sys.modules.get(module_name)
-    if module is None:
-        module = types.ModuleType(module_name)
-        module.__file__ = str(Path(folder, "registration.py"))
-        module.__spec__ = importlib.machinery.ModuleSpec(module_name, loader=None)
-        sys.modules[module_name] = module
-        exec(compile("import streamlit.components.v1 as components\ndef declare(folder):\n return components.declare_component('garage_parts',path=folder)\n", module.__file__, "exec"), module.__dict__)
-    module.declare(folder)(document=document, model=json.dumps(selections, sort_keys=True), active_part=active_part, key="garage_part_picker", default=None)
+    """중앙의 가장 큰 영역에 실제 WebGL 3D 뷰어를 삽입합니다."""
+    components.html(build_3d_html(parts, selections, active_part), height=540, scrolling=False)
 
+
+
+def diffuser_geometry(variant, shape):
+    """기존 독립 3D 디퓨저의 치수/위치/회전을 공유하는 상자 목록."""
+    v = variant
+    boxes = [dict(size=[.08, .7+v*.25, (1.7+v*.4)*shape],
+                  position=[-1.2+i*(2.4/(2+v*2)), 0, 0], rotation=.22+v*.12)
+             for i in range(3+v*2)]
+    boxes.append(dict(size=[3.1, .12, (1.7+v*.35)*shape],
+                      position=[0, -.55, 0], rotation=.15+v*.08))
+    return boxes
+
+
+def render_diffuser_svg(variant, color, shape):
+    """공유 상자의 모서리를 고정 시점에서 2D 평면 SVG로 투영. WebGL 없음."""
+    import math
+    faces = []
+    # 3D 초기 카메라 (4, 2.6, 5.5)와 같은 방향의 정사영.
+    norm = lambda a: [v / math.sqrt(sum(x*x for x in a)) for v in a]
+    forward = norm([4, 2.6, 5.5])
+    right = norm([5.5, 0, -4])
+    up = [forward[1]*right[2]-forward[2]*right[1],
+          forward[2]*right[0]-forward[0]*right[2],
+          forward[0]*right[1]-forward[1]*right[0]]
+    dot = lambda a, b: sum(x*y for x,y in zip(a,b))
+    indices = [(0,1,3,2),(4,6,7,5),(0,4,5,1),(2,3,7,6),(0,2,6,4),(1,5,7,3)]
+    for box in diffuser_geometry(variant, shape):
+        w,h,d = box['size']; a = box['rotation']; co,si = math.cos(a),math.sin(a)
+        points=[]
+        for x in [-w/2,w/2]:
+            for y in [-h/2,h/2]:
+                for z in [-d/2,d/2]:
+                    points.append([x+box['position'][0],y*co-z*si+box['position'][1],y*si+z*co+box['position'][2]])
+        for ids in indices:
+            face=[points[i] for i in ids]
+            faces.append((sum(dot(p,forward) for p in face)/4,
+                          [(dot(p,right),-dot(p,up)) for p in face]))
+    # 모든 옵션에 공통 배율 적용: 옵션 사이 치수 차이도 유지.
+    scale=31
+    polygons=[]
+    safe_color=html.escape(color,quote=True)
+    for _,points in sorted(faces,key=lambda pair:pair[0]):
+        coords=' '.join(f'{100+x*scale:.3f},{62+y*scale:.3f}' for x,y in points)
+        polygons.append(f'<polygon points="{coords}" fill="{safe_color}" stroke="#122530" stroke-width="0.6" stroke-linejoin="round"/>')
+    return '<svg class="part-svg" viewBox="0 0 200 125" preserveAspectRatio="xMidYMid meet" role="img" aria-label="디퓨저 공통 모델의 2D 투영">'+''.join(polygons)+'</svg>'
 
 
 def build_part_preview_html(parts, selections, active_part):
-    """독립 부품 조립 모델. 전체 차량 장면을 생성하거나 잘라내지 않습니다."""
-    option=parts[active_part]["options"][selections[active_part]]
-    cfg={"key":active_part,"variant":list(parts[active_part]["options"]).index(selections[active_part]),"shape":option["shape"],"color":option["color"]}
-    template="""<!doctype html><html><head><meta charset="utf-8"><style>html,body,#app{margin:0;width:100%;height:100%;overflow:hidden;background:#101720}canvas{display:block}</style>
-    <script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.170.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.170.0/examples/jsm/"}}</script></head><body><div id="app"></div><script type="module">
-    import * as T from 'three';import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-    const cfg=__CONFIG__,v=cfg.variant,f=cfg.shape,app=document.getElementById('app');
-    const scene=new T.Scene(),model=new T.Group();scene.add(model);
-    const renderer=new T.WebGLRenderer({antialias:true});renderer.setClearColor(0x101720);renderer.setPixelRatio(Math.min(devicePixelRatio,2));app.appendChild(renderer.domElement);
-    const camera=new T.PerspectiveCamera(38,1,.01,200),controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;
-    scene.add(new T.HemisphereLight(0xffffff,0x394657,2.5));const light=new T.DirectionalLight(0xffffff,3);light.position.set(3,5,6);scene.add(light);
-    const material=new T.MeshStandardMaterial({color:cfg.color,metalness:.6,roughness:.3}),dark=new T.MeshStandardMaterial({color:0x252e38,metalness:.7,roughness:.4});
-    function mesh(geometry,mat=material,pos=[0,0,0],rotation=[0,0,0]){const m=new T.Mesh(geometry,mat);m.position.set(...pos);m.rotation.set(...rotation);model.add(m);return m}
-    function rod(a,b,r=.055){const x=new T.Vector3(...a),y=new T.Vector3(...b),d=y.clone().sub(x);const m=mesh(new T.CylinderGeometry(r,r,d.length(),16),material,x.clone().add(y).multiplyScalar(.5).toArray());m.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d.normalize())}
-    if(cfg.key==='brakes'){
-      const r=.38-v*.055;mesh(new T.CylinderGeometry(r,r,.07,48),dark,[0,0,0],[Math.PI/2,0,0]);
-      mesh(new T.TorusGeometry(r*.78,.018,8,48),material);
-      mesh(new T.CylinderGeometry(r*.32,r*.32,.10,32),material,[0,0,0],[Math.PI/2,0,0]);
-      mesh(new T.BoxGeometry(r*.46,r*1.12,.16),material,[r*.82,0,.045]);
-      for(let i=0;i<12;i++){const t=i*Math.PI/6;mesh(new T.CylinderGeometry(.012,.012,.004,8),dark,[Math.cos(t)*r*.68,Math.sin(t)*r*.68,.039],[Math.PI/2,0,0])}
-    }else if(cfg.key==='tyres'){
-      mesh(new T.TorusGeometry(.56,.56*(.43-v*.045),18+v*5,42),new T.MeshStandardMaterial({color:0x08090b,roughness:.58+v*.1}));
-      mesh(new T.TorusGeometry(.56*.99,.035,8,48),material,[0,0,.56*(.43-v*.045)]);
-    }else if(cfg.key==='suspension'){
-      const hub=[.95,0,0],r=.055-v*.007;
-      [[0,-.2,-.48],[0,-.2,.48],[0,.33,-.30],[0,.33,.30],[0,.56,0]].forEach((a,i)=>rod(a,hub,r*(i===4?.82:i>1?.9:1)));
-      mesh(new T.SphereGeometry(.12,16,10),material,hub);
-    }else if(cfg.key==='front_wing'||cfg.key==='rear_wing'){
-      const front=cfg.key==='front_wing',length=(front?3.2:2.55)*f,n=front?2+v:2+v;
-      for(let i=0;i<n;i++)mesh(new T.CapsuleGeometry(front?.11:.12,length,6,20),material,[0,i*.22,-i*.22],[0,0,Math.PI/2]);
-      [-1,1].forEach(sign=>mesh(new T.BoxGeometry(.06,.7,.7),material,[sign*(length/2+.1),.2,-.2]));
-    }else if(cfg.key==='floor'){
-      const shape=new T.Shape().moveTo(-1.25,-2.7).lineTo(-1.25,1.4).lineTo(-.8,2.8).lineTo(.8,2.8).lineTo(1.25,1.4).lineTo(1.25,-2.7).closePath();
-      mesh(new T.ExtrudeGeometry(shape,{depth:.09,bevelEnabled:true,bevelSize:.04,bevelThickness:.03}),material,[0,0,0],[Math.PI/2,0,0]);
-    }else if(cfg.key==='diffuser'){
-      [-.72,-.24,.24,.72].forEach(x=>mesh(new T.BoxGeometry(.055,.7,1.35*f),material,[x,0,0],[.38,0,0]));
-    }else if(cfg.key==='engine'){
-      mesh(new T.CapsuleGeometry(.50-v*.06,1.45-v*.12,8,18),material,[0,0,0],[Math.PI/2,0,0]);
-    }else if(cfg.key==='ers')mesh(new T.TorusGeometry(.30-v*.035,.075-v*.01,10,28+v*8),material);
-    const bounds=new T.Box3().setFromObject(model),center=bounds.getCenter(new T.Vector3()),size=bounds.getSize(new T.Vector3());model.position.sub(center);
-    const radius=Math.max(size.length()/2,.1);controls.target.set(0,0,0);controls.minDistance=radius*1.2;controls.maxDistance=radius*12;
-    function resize(){const w=Math.max(app.clientWidth,1),h=Math.max(app.clientHeight,1);renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix()}
-    resize();const angle=Math.min(camera.fov*Math.PI/360,Math.atan(Math.tan(camera.fov*Math.PI/360)*camera.aspect));
-    camera.position.copy(new T.Vector3(.6,.4,1.5).normalize().multiplyScalar(radius/Math.sin(angle)*1.12));camera.lookAt(0,0,0);window.addEventListener('resize',resize);
-    function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)}animate();
+    """선택한 파츠만 확대해 보여 주는 별도의 회전 가능한 3D 프리뷰를 만듭니다."""
+    data = parts[active_part]
+    option = data["options"][selections[active_part]]
+    cfg = json.dumps({"part": active_part, "color": option["color"], "shape": option["shape"], "variant": list(data["options"]).index(selections[active_part]), "diffuser_boxes": diffuser_geometry(list(data["options"]).index(selections[active_part]), option["shape"]) if active_part == "diffuser" else None})
+    return f"""<!doctype html><html><head><style>*{{box-sizing:border-box}}html,body,#p{{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(circle,#24313d,#090d12 70%)}}canvas{{display:block}}#tag{{position:absolute;left:14px;bottom:10px;color:#8d9baa;font:10px Arial;letter-spacing:1px}}</style><script type='importmap'>{{"imports":{{"three":"https://unpkg.com/three@0.164.1/build/three.module.js","three/addons/":"https://unpkg.com/three@0.164.1/examples/jsm/"}}}}</script></head><body><div id='p'></div><div id='tag'>DRAG TO INSPECT · 3D PART MODEL</div><script type='module'>
+    import * as THREE from 'three';import {{OrbitControls}} from 'three/addons/controls/OrbitControls.js';
+    const cfg={cfg},root=document.getElementById('p'),scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(36,root.clientWidth/root.clientHeight,.1,50);camera.position.set(4,2.6,5.5);
+    const renderer=new THREE.WebGLRenderer({{antialias:true,alpha:true}});renderer.setSize(root.clientWidth,root.clientHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;root.appendChild(renderer.domElement);
+    const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.autoRotate=true;controls.autoRotateSpeed=.8;controls.minDistance=3.5;controls.maxDistance=10;
+    scene.add(new THREE.HemisphereLight(0xcce6ff,0x111111,2.7));const light=new THREE.DirectionalLight(0xffffff,4);light.position.set(4,6,3);scene.add(light);const rim=new THREE.PointLight(0x27d6ff,35,15);rim.position.set(-4,2,-2);scene.add(rim);
+    const g=new THREE.Group();scene.add(g);const m=new THREE.MeshStandardMaterial({{color:cfg.color,metalness:.7,roughness:.22,emissive:0x101820}}),dark=new THREE.MeshStandardMaterial({{color:0x090b0e,roughness:.65}});
+    function add(geo,pos=[0,0,0],rot=[0,0,0],mat=m){{const o=new THREE.Mesh(geo,mat);o.position.set(...pos);o.rotation.set(...rot);o.castShadow=true;g.add(o)}}
+    const cap=(r,l)=>new THREE.CapsuleGeometry(r,l,8,28),s=cfg.shape;
+    const v=cfg.variant;
+    if(cfg.part==='front_wing'){{Array.from({{length:2+v}},(_,i)=>add(cap(.11+v*.015,(3.0+v*.38)*s),[0,-.25+i*.25,-i*.28],[i*.08,0,Math.PI/2]));[-1,1].forEach(x=>add(new THREE.BoxGeometry(.08,.55+v*.15,.62+v*.1),[x*(1.6+v*.18)*s,-.05,.02]))}}
+    else if(cfg.part==='rear_wing'){{Array.from({{length:1+v}},(_,i)=>add(cap(.13+v*.02,(2.5+v*.32)*s),[0,.55-i*.4,-i*.16],[i*.1,0,Math.PI/2]));[-1,1].forEach(x=>add(new THREE.BoxGeometry(.1,1.1+v*.25,.18),[x*(1.0+v*.13)*s,-.25,.1]))}}
+    else if(cfg.part==='tyres'){{add(new THREE.TorusGeometry(1.05,.50-v*.07,18+v*8,64),[0,0,0],[0,Math.PI/2,0],dark);add(new THREE.TorusGeometry(1.04,.075-v*.012,10,64),[0,0,0],[0,Math.PI/2,0],m);for(let i=0;i<4+v*3;i++)add(new THREE.BoxGeometry(.05,.12,.35),[0,Math.sin(i/(4+v*3)*6.28)*.82,Math.cos(i/(4+v*3)*6.28)*.82],[i,0,0],m)}}
+    else if(cfg.part==='brakes'){{add(new THREE.CylinderGeometry(1-v*.12,1-v*.12,.18,36+v*12),[0,0,0],[0,0,Math.PI/2]);add(new THREE.BoxGeometry(.32+v*.1,1.0-v*.1,.45),[0,.25,.72]);for(let i=0;i<v*6;i++)add(new THREE.CylinderGeometry(.035,.035,.25,8),[0,Math.sin(i/6*6.28)*.62,Math.cos(i/6*6.28)*.62],[0,0,Math.PI/2],dark)}}
+    else if(cfg.part==='suspension'){{Array.from({{length:2+v}},(_,i)=>-.7+i*(1.4/(1+v))).forEach((x,i)=>add(new THREE.CylinderGeometry(.085-v*.02,.085-v*.02,3.0+v*.15,12),[x,0,0],[0,0,(i-(1+v)/2)*.35]));add(new THREE.CylinderGeometry(.42-v*.06,.42-v*.06,2.1,24),[0,0,0])}}
+    else if(cfg.part==='floor'){{const w=1.35+(.5-v*.2), sh=new THREE.Shape().moveTo(-w,-2).lineTo(-1.1-v*.12,2).lineTo(1.1+v*.12,2).lineTo(w,-2).lineTo(-w,-2);add(new THREE.ExtrudeGeometry(sh,{{depth:.10+v*.04,bevelEnabled:true,bevelSize:.05,bevelThickness:.04}}),[0,0,0],[Math.PI/2,0,0]);for(let i=0;i<v+1;i++)add(new THREE.BoxGeometry(.06,.25,3.2),[-.55+i*1.1,-.18,0])}}
+    else if(cfg.part==='diffuser'){{cfg.diffuser_boxes.forEach(b=>add(new THREE.BoxGeometry(...b.size),b.position,[b.rotation,0,0]))}}
+    else if(cfg.part==='engine'){{add(cap(.55+(.18-v*.08),2.0+(.5-v*.2)),[0,0,0],[Math.PI/2,0,0]);[-1,1].forEach(x=>add(new THREE.CylinderGeometry(.24+(.12-v*.03),.4-v*.04,1.2+v*.15,20+v*6),[x*(.72+v*.08),0,0],[Math.PI/2,0,0]))}}
+    else{{Array.from({{length:1+v}},(_,i)=>add(new THREE.TorusGeometry(1.05-i*.25,.20-v*.025,18,48),[0,0,i*.18]));add(new THREE.CylinderGeometry(.16+.03*v,.16+.03*v,2.2+v*.2,18),[0,0,0],[0,0,Math.PI/2])}}
+    const ground=new THREE.Mesh(new THREE.CircleGeometry(4,64),new THREE.MeshStandardMaterial({{color:0x10161c,metalness:.5,roughness:.5}}));ground.rotation.x=-Math.PI/2;ground.position.y=-1.5;scene.add(ground);
+    function tick(){{requestAnimationFrame(tick);controls.update();renderer.render(scene,camera)}}tick();window.addEventListener('resize',()=>{{camera.aspect=root.clientWidth/root.clientHeight;camera.updateProjectionMatrix();renderer.setSize(root.clientWidth,root.clientHeight)}});
     </script></body></html>"""
-    return template.replace("__CONFIG__",json.dumps(cfg))
 
 
 def render_part_description(active_part, parts):
@@ -561,21 +430,16 @@ def render_advantages_and_disadvantages(parts, active_part, option_key):
 # -----------------------------------------------------------------------------
 def render_help_message():
     """처음 온 사용자가 3초 안에 조작법을 이해하도록 짧게 안내합니다."""
-    st.markdown("""<div class='intro'><strong>🏎 MY F1 CAR</strong><span>① 차량을 드래그해서 360°로 살펴보세요</span><span>② 왼쪽 목록에서 부품 설정을 바꾸세요</span><span>③ 성능에 마우스를 올려 물리를 배워보세요</span></div>""", unsafe_allow_html=True)
+    st.markdown("""<div class='intro'><strong>🏎 MY F1 CAR</strong><span>① 차량을 드래그해서 360°로 살펴보세요</span><span>② 부품을 클릭해 설정을 바꾸세요</span><span>③ 성능에 마우스를 올려 물리를 배워보세요</span></div>""", unsafe_allow_html=True)
 
 
 def render_part_menu(parts, active_part):
     """왼쪽 메뉴는 파츠 선택과 클릭형 물음표 설명만 담당합니다."""
     st.markdown("<div class='section-label'>01 / PARTS</div>", unsafe_allow_html=True)
-    selected_rules = "".join(
-        f"div.st-key-part_choice_{key} button, div.st-key-part_choice_{key} button:hover, div.st-key-part_choice_{key} button:focus{{background:#174354!important;border:3px solid #27d6ff!important;color:#edfcff!important;box-shadow:0 0 0 1px #27d6ff55!important}}"
-        for key in parts if key == active_part
-    )
-    st.markdown(f"<style>{selected_rules}</style>", unsafe_allow_html=True)
     for key, data in parts.items():
         part_column, info_column = st.columns([5, 1], gap="small")
-        with part_column, st.container(key=f"part_choice_{key}"):
-            if st.button(f"{data['icon']}   {data['name']}", key=f"menu_{key}", type="primary" if key == active_part else "secondary", use_container_width=True):
+        with part_column:
+            if st.button(f"{data['icon']}   {data['name']}", key=f"menu_{key}", use_container_width=True):
                 st.session_state.active_part = key
                 # 다른 파츠를 고르면 이전 설명창은 자연스럽게 닫습니다.
                 st.session_state.open_part_info = None
@@ -600,8 +464,10 @@ def stars(value):
     return "★" * value + "☆" * (5 - value)
 
 
-def render_option_svg(part_key, variant, color):
+def render_option_svg(part_key, variant, color, shape=1.0):
     """세 옵션의 크기·플랩 수·표면 패턴이 확실히 다른 교육용 파츠 SVG를 만듭니다."""
+    if part_key == "diffuser":
+        return render_diffuser_svg(variant, color, shape)
     v = variant
     if part_key == "front_wing":
         width = 125 + v * 24; flaps = "".join(f'<path class="thin" d="M{42-v*7} {55-i*11} Q100 {36-i*8} {158+v*7} {55-i*11}"/>' for i in range(2+v))
@@ -609,14 +475,11 @@ def render_option_svg(part_key, variant, color):
     elif part_key == "rear_wing":
         body = "".join(f'<path class="main" d="M{42-v*8} {38+i*17} Q100 {25+i*14-v*3} {158+v*8} {38+i*17} L{155+v*8} {48+i*17} Q100 {37+i*14} {45-v*8} {48+i*17}Z"/>' for i in range(1+v)) + '<path class="line" d="M50 35v65M150 35v65"/>'
     elif part_key == "tyres":
-        outer=49-v*1.5;inner=20+v*1.5
-        body=f'<circle cx="100" cy="62" r="{outer}" fill="#12161c" stroke="#8694a4" stroke-width="2"/><circle cx="100" cy="62" r="{inner}" fill="#101720" stroke="#586574" stroke-width="2"/><circle cx="100" cy="62" r="38" fill="none" stroke="{color}" stroke-width="3"/>'
+        grooves="".join(f'<path class="thin" d="M{64+i*12} 30l-8 60"/>' for i in range(3+v*2)); body=f'<ellipse class="dark" cx="100" cy="62" rx="{38-v*3}" ry="50"/><ellipse class="main" cx="100" cy="62" rx="{20-v*2}" ry="31"/>{grooves}'
     elif part_key == "brakes":
         holes="".join(f'<circle cx="{100+28*((i%2)*2-1)}" cy="{38+i*12}" r="3" fill="#071018"/>' for i in range(2+v*2)); body=f'<circle class="main" cx="100" cy="62" r="{42-v*4}"/><circle class="dark" cx="100" cy="62" r="18"/>{holes}<rect class="main" x="132" y="38" width="{20+v*5}" height="48" rx="7"/>'
-    elif part_key == "suspension":
-        body=f'<g stroke-width="{5-v*.65}"><path class="line" d="M40 24L160 65L40 104M55 40L160 65L55 88M70 16L160 65"/></g><circle class="main" cx="160" cy="65" r="10"/><circle class="dark" cx="160" cy="65" r="4"/>'
+    elif part_key == "suspension": body="".join(f'<path class="line" d="M{45+i*55/(1+v)} 95 L{75+i*25} 28"/>' for i in range(2+v))+f'<rect class="main" x="88" y="20" width="{24-v*3}" height="84" rx="10"/>'
     elif part_key == "floor": body=f'<path class="main" d="M{42-v*8} 104 L{58+v*5} 18 H{142-v*5} L{158+v*8} 104Z"/>'+"".join(f'<path class="thin" d="M{76+i*24} 25v70"/>' for i in range(1+v))
-    elif part_key == "diffuser": body=f'<path class="main" d="M{48-v*6} 96 L{58+v*4} 26 H{142-v*4} L{152+v*6} 96Z"/>'+"".join(f'<path class="line" d="M{62+i*(76/(2+v*2))} 32l-8 58"/>' for i in range(3+v*2))
     elif part_key == "engine": body=f'<ellipse class="main" cx="100" cy="62" rx="{56-v*5}" ry="{30+v*3}"/><circle class="dark" cx="{64+v*4}" cy="62" r="{17-v*2}"/><circle class="dark" cx="{136-v*4}" cy="62" r="{17-v*2}"/>'+"".join(f'<path class="thin" d="M{80+i*12} 35v54"/>' for i in range(1+v*2))
     else: body="".join(f'<ellipse class="main" cx="100" cy="62" rx="{52-i*12}" ry="{34-i*8}"/>' for i in range(1+v))+f'<path class="line" d="M{52-v*5} 62h{96+v*10}"/>'
     return f'<svg class="part-svg" viewBox="0 0 200 125" style="--pc:{color}" aria-label="옵션별 파츠 모습">{body}</svg>'
@@ -630,11 +493,7 @@ def render_part_options(parts, active_part, selections):
     for variant, ((option_key, option), column) in enumerate(zip(data["options"].items(), columns)):
         with column:
             tooltip = html.escape(option["explanation"], quote=True)
-            option_selection = dict(selections)
-            option_selection[active_part] = option_key
-            svg=render_option_svg(active_part,variant,option["color"])
-            components.html("<style>html,body{margin:0;background:#101720}svg{display:block;width:100%;height:180px}.main{fill:var(--pc);stroke:var(--pc);stroke-width:2}.dark{fill:#202c38;stroke:#b9c8d8;stroke-width:2}.line{fill:none;stroke:var(--pc);stroke-width:4;stroke-linecap:round}.thin{fill:none;stroke:#c9deeb;stroke-width:2}</style>"+svg,height=180,scrolling=False)
-            st.markdown(f"<div class='option-name'>{html.escape(option['label'])}</div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='option-visual option-tip'>{render_option_svg(active_part, variant, option['color'], option['shape'])}<span class='tip-box'>{tooltip}</span></div><div class='option-name'><span class='hover-tip'>{option['label']} ⓘ<span class='tip-box'>{tooltip}</span></span></div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
             if selections[active_part] == option_key:
                 st.markdown("<div class='installed'>장착 중 ✓</div>", unsafe_allow_html=True)
             elif st.button("이 파츠 장착", key=f"equip_{active_part}_{option_key}", use_container_width=True):
@@ -695,15 +554,6 @@ def main():
     """데이터 준비 → 사용자 입력 → 계산 → 3D 및 UI 렌더링 순서로 앱을 실행합니다."""
     st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏁", layout="wide", initial_sidebar_state="collapsed")
     apply_game_css()
-    st.markdown("""<style>
-    .stButton>button{border-radius:6px;min-height:40px;box-shadow:none!important;transition:background .12s,border-color .12s}
-    .stButton>button:focus:not(:focus-visible){outline:none;box-shadow:none!important}
-    .stButton>button:focus-visible{outline:2px solid #27d6ff!important;outline-offset:3px}
-    .tuning-bay{background:#101720;box-shadow:none;border-radius:8px;padding:16px}
-    .garage-head{box-shadow:none}.option-visual{box-shadow:none}
-    .home-card{border-radius:8px;box-shadow:none}.selected-option{box-shadow:none;border-color:#27d6ff}
-    input,[data-baseweb="select"]{border-radius:6px}
-    </style>""", unsafe_allow_html=True)
     if "app_view" not in st.session_state:
         st.session_state.app_view = "home"
     if st.session_state.app_view == "home":
@@ -711,7 +561,7 @@ def main():
         .home-wrap{max-width:950px;margin:9vh auto 0;text-align:center;padding:32px;color:#eff5fa}
         .home-title{font-size:clamp(32px,5vw,58px);font-weight:900;letter-spacing:2px}
         .home-title b{color:#ff3158}.home-sub{color:#a8bac9;margin:12px 0 35px}
-        .home-card{background:#101821;border:1px solid #344353;border-top:1px solid #344353;
+        .home-card{background:#101821;border:1px solid #344353;border-top:3px solid #27d6ff;
         padding:24px;text-align:left;min-height:125px}.home-card h3{margin:0 0 10px}
         .home-card p{color:#a8bac9;font-size:14px}.home-locked{border-top-color:#677481}
         </style>""", unsafe_allow_html=True)
@@ -730,18 +580,18 @@ def main():
         left, right = st.columns(2, gap="medium")
         with left:
             st.markdown("<div class='home-card'><h3>🏎 차량 설계하기</h3><p>Garage에서 파츠를 선택하고 내 F1 차량을 완성하세요.</p></div>", unsafe_allow_html=True)
-            if st.button("🔧 차량 설계 화면으로 돌아가기", use_container_width=True):
+            if st.button("차량 설계하기", use_container_width=True):
                 st.session_state.app_view = "garage"
                 st.rerun()
         with right:
             st.markdown("<div class='home-card home-locked'><h3>🏁 레이싱 시뮬레이션</h3><p>" +
                         ("설계한 차량으로 테스트 서킷을 달려보세요." if ready else "🔒 먼저 차량을 설계해 주세요.") +
                         "</p></div>", unsafe_allow_html=True)
-            if st.button("🏎️ 레이싱 시뮬레이션 시작", disabled=not ready,
+            if st.button("레이싱 시뮬레이션", disabled=not ready,
                          help=None if ready else "먼저 차량을 설계해 주세요.", use_container_width=True):
                 st.switch_page("pages/racing.py")
         # 기존 두 시작 버튼은 유지하고 그 아래에 상담 버튼을 추가합니다.
-        if st.button("🤖 AI 레이스 엔지니어와 대화하기", key="home_ai_engineer", use_container_width=True):
+        if st.button("AI 레이스 엔지니어와 대화하기", key="home_ai_engineer", use_container_width=True):
             open_ai_engineer()
         return
     parts = get_part_data()
@@ -753,7 +603,6 @@ def main():
     query_part = st.query_params.get("part")
     if query_part in parts:
         st.session_state.active_part = query_part
-        st.query_params.pop("part", None)
     if "active_part" not in st.session_state:
         st.session_state.active_part = "front_wing"
     if "open_part_info" not in st.session_state:
@@ -774,17 +623,17 @@ def main():
     st.markdown("<div class='garage-head'><div class='logo'>F1 <b>RACING SIMULATOR</b> · GARAGE</div><div class='step'>BUILD 02 · INTERACTIVE 3D SETUP</div></div>", unsafe_allow_html=True)
     nav_race, nav_home, nav_ai = st.columns(3)
     with nav_race:
-        if st.button("🏎️ 레이싱 시뮬레이션 시작", disabled=not (
+        if st.button("🏁 레이싱 시뮬레이션 시작", disabled=not (
             isinstance(st.session_state.get("my_car_config"), dict)
             and isinstance(st.session_state.get("my_car_performance"), dict)
         ), use_container_width=True):
             st.switch_page("pages/racing.py")
     with nav_home:
-        if st.button("🏠 처음 화면으로 돌아가기", use_container_width=True):
+        if st.button("⌂ 처음 화면으로 돌아가기", use_container_width=True):
             st.session_state.app_view = "home"
             st.rerun()
     with nav_ai:
-        if st.button("🤖 AI 레이스 엔지니어와 대화하기", key="garage_ai_engineer", use_container_width=True):
+        if st.button("AI 레이스 엔지니어와 대화하기", key="garage_ai_engineer", use_container_width=True):
             open_ai_engineer()
     render_help_message()
 
