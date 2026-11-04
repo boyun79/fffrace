@@ -322,6 +322,9 @@ def render_diffuser_svg(variant, color, shape):
     return '<svg class="part-svg" viewBox="0 0 200 125" preserveAspectRatio="xMidYMid meet" role="img" aria-label="디퓨저 공통 모델의 2D 투영">'+''.join(polygons)+'</svg>'
 
 
+PART_MODEL_JS = "function populatePart(g,cfg,m,dark){\n    function add(geo,pos=[0,0,0],rot=[0,0,0],mat=m){const o=new THREE.Mesh(geo,mat);o.position.set(...pos);o.rotation.set(...rot);o.castShadow=true;g.add(o)}\n    const cap=(r,l)=>new THREE.CapsuleGeometry(r,l,8,28),s=cfg.shape;\n    const v=cfg.variant;\n    if(cfg.part==='front_wing'){Array.from({length:2+v},(_,i)=>add(cap(.11+v*.015,(3.0+v*.38)*s),[0,-.25+i*.25,-i*.28],[i*.08,0,Math.PI/2]));[-1,1].forEach(x=>add(new THREE.BoxGeometry(.08,.55+v*.15,.62+v*.1),[x*(1.6+v*.18)*s,-.05,.02]))}\n    else if(cfg.part==='rear_wing'){Array.from({length:1+v},(_,i)=>add(cap(.13+v*.02,(2.5+v*.32)*s),[0,.55-i*.4,-i*.16],[i*.1,0,Math.PI/2]));[-1,1].forEach(x=>add(new THREE.BoxGeometry(.1,1.1+v*.25,.18),[x*(1.0+v*.13)*s,-.25,.1]))}\n    else if(cfg.part==='tyres'){add(new THREE.TorusGeometry(1.05,.50-v*.07,18+v*8,64),[0,0,0],[0,Math.PI/2,0],dark);add(new THREE.TorusGeometry(1.04,.075-v*.012,10,64),[0,0,0],[0,Math.PI/2,0],m);for(let i=0;i<4+v*3;i++)add(new THREE.BoxGeometry(.05,.12,.35),[0,Math.sin(i/(4+v*3)*6.28)*.82,Math.cos(i/(4+v*3)*6.28)*.82],[i,0,0],m)}\n    else if(cfg.part==='brakes'){add(new THREE.CylinderGeometry(1-v*.12,1-v*.12,.18,36+v*12),[0,0,0],[0,0,Math.PI/2]);add(new THREE.BoxGeometry(.32+v*.1,1.0-v*.1,.45),[0,.25,.72]);for(let i=0;i<v*6;i++)add(new THREE.CylinderGeometry(.035,.035,.25,8),[0,Math.sin(i/6*6.28)*.62,Math.cos(i/6*6.28)*.62],[0,0,Math.PI/2],dark)}\n    else if(cfg.part==='suspension'){Array.from({length:2+v},(_,i)=>-.7+i*(1.4/(1+v))).forEach((x,i)=>add(new THREE.CylinderGeometry(.085-v*.02,.085-v*.02,3.0+v*.15,12),[x,0,0],[0,0,(i-(1+v)/2)*.35]));add(new THREE.CylinderGeometry(.42-v*.06,.42-v*.06,2.1,24),[0,0,0])}\n    else if(cfg.part==='floor'){const w=1.35+(.5-v*.2), sh=new THREE.Shape().moveTo(-w,-2).lineTo(-1.1-v*.12,2).lineTo(1.1+v*.12,2).lineTo(w,-2).lineTo(-w,-2);add(new THREE.ExtrudeGeometry(sh,{depth:.10+v*.04,bevelEnabled:true,bevelSize:.05,bevelThickness:.04}),[0,0,0],[Math.PI/2,0,0]);for(let i=0;i<v+1;i++)add(new THREE.BoxGeometry(.06,.25,3.2),[-.55+i*1.1,-.18,0])}\n    else if(cfg.part==='diffuser'){cfg.diffuser_boxes.forEach(b=>add(new THREE.BoxGeometry(...b.size),b.position,[b.rotation,0,0]))}\n    else if(cfg.part==='engine'){add(cap(.55+(.18-v*.08),2.0+(.5-v*.2)),[0,0,0],[Math.PI/2,0,0]);[-1,1].forEach(x=>add(new THREE.CylinderGeometry(.24+(.12-v*.03),.4-v*.04,1.2+v*.15,20+v*6),[x*(.72+v*.08),0,0],[Math.PI/2,0,0]))}\n    else{Array.from({length:1+v},(_,i)=>add(new THREE.TorusGeometry(1.05-i*.25,.20-v*.025,18,48),[0,0,i*.18]));add(new THREE.CylinderGeometry(.16+.03*v,.16+.03*v,2.2+v*.2,18),[0,0,0],[0,0,Math.PI/2])}\n\n}\n"
+
+
 def build_part_preview_html(parts, selections, active_part):
     """선택한 파츠만 확대해 보여 주는 별도의 회전 가능한 3D 프리뷰를 만듭니다."""
     data = parts[active_part]
@@ -334,18 +337,8 @@ def build_part_preview_html(parts, selections, active_part):
     const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.autoRotate=true;controls.autoRotateSpeed=.8;controls.minDistance=3.5;controls.maxDistance=10;
     scene.add(new THREE.HemisphereLight(0xcce6ff,0x111111,2.7));const light=new THREE.DirectionalLight(0xffffff,4);light.position.set(4,6,3);scene.add(light);const rim=new THREE.PointLight(0x27d6ff,35,15);rim.position.set(-4,2,-2);scene.add(rim);
     const g=new THREE.Group();scene.add(g);const m=new THREE.MeshStandardMaterial({{color:cfg.color,metalness:.7,roughness:.22,emissive:0x101820}}),dark=new THREE.MeshStandardMaterial({{color:0x090b0e,roughness:.65}});
-    function add(geo,pos=[0,0,0],rot=[0,0,0],mat=m){{const o=new THREE.Mesh(geo,mat);o.position.set(...pos);o.rotation.set(...rot);o.castShadow=true;g.add(o)}}
-    const cap=(r,l)=>new THREE.CapsuleGeometry(r,l,8,28),s=cfg.shape;
-    const v=cfg.variant;
-    if(cfg.part==='front_wing'){{Array.from({{length:2+v}},(_,i)=>add(cap(.11+v*.015,(3.0+v*.38)*s),[0,-.25+i*.25,-i*.28],[i*.08,0,Math.PI/2]));[-1,1].forEach(x=>add(new THREE.BoxGeometry(.08,.55+v*.15,.62+v*.1),[x*(1.6+v*.18)*s,-.05,.02]))}}
-    else if(cfg.part==='rear_wing'){{Array.from({{length:1+v}},(_,i)=>add(cap(.13+v*.02,(2.5+v*.32)*s),[0,.55-i*.4,-i*.16],[i*.1,0,Math.PI/2]));[-1,1].forEach(x=>add(new THREE.BoxGeometry(.1,1.1+v*.25,.18),[x*(1.0+v*.13)*s,-.25,.1]))}}
-    else if(cfg.part==='tyres'){{add(new THREE.TorusGeometry(1.05,.50-v*.07,18+v*8,64),[0,0,0],[0,Math.PI/2,0],dark);add(new THREE.TorusGeometry(1.04,.075-v*.012,10,64),[0,0,0],[0,Math.PI/2,0],m);for(let i=0;i<4+v*3;i++)add(new THREE.BoxGeometry(.05,.12,.35),[0,Math.sin(i/(4+v*3)*6.28)*.82,Math.cos(i/(4+v*3)*6.28)*.82],[i,0,0],m)}}
-    else if(cfg.part==='brakes'){{add(new THREE.CylinderGeometry(1-v*.12,1-v*.12,.18,36+v*12),[0,0,0],[0,0,Math.PI/2]);add(new THREE.BoxGeometry(.32+v*.1,1.0-v*.1,.45),[0,.25,.72]);for(let i=0;i<v*6;i++)add(new THREE.CylinderGeometry(.035,.035,.25,8),[0,Math.sin(i/6*6.28)*.62,Math.cos(i/6*6.28)*.62],[0,0,Math.PI/2],dark)}}
-    else if(cfg.part==='suspension'){{Array.from({{length:2+v}},(_,i)=>-.7+i*(1.4/(1+v))).forEach((x,i)=>add(new THREE.CylinderGeometry(.085-v*.02,.085-v*.02,3.0+v*.15,12),[x,0,0],[0,0,(i-(1+v)/2)*.35]));add(new THREE.CylinderGeometry(.42-v*.06,.42-v*.06,2.1,24),[0,0,0])}}
-    else if(cfg.part==='floor'){{const w=1.35+(.5-v*.2), sh=new THREE.Shape().moveTo(-w,-2).lineTo(-1.1-v*.12,2).lineTo(1.1+v*.12,2).lineTo(w,-2).lineTo(-w,-2);add(new THREE.ExtrudeGeometry(sh,{{depth:.10+v*.04,bevelEnabled:true,bevelSize:.05,bevelThickness:.04}}),[0,0,0],[Math.PI/2,0,0]);for(let i=0;i<v+1;i++)add(new THREE.BoxGeometry(.06,.25,3.2),[-.55+i*1.1,-.18,0])}}
-    else if(cfg.part==='diffuser'){{cfg.diffuser_boxes.forEach(b=>add(new THREE.BoxGeometry(...b.size),b.position,[b.rotation,0,0]))}}
-    else if(cfg.part==='engine'){{add(cap(.55+(.18-v*.08),2.0+(.5-v*.2)),[0,0,0],[Math.PI/2,0,0]);[-1,1].forEach(x=>add(new THREE.CylinderGeometry(.24+(.12-v*.03),.4-v*.04,1.2+v*.15,20+v*6),[x*(.72+v*.08),0,0],[Math.PI/2,0,0]))}}
-    else{{Array.from({{length:1+v}},(_,i)=>add(new THREE.TorusGeometry(1.05-i*.25,.20-v*.025,18,48),[0,0,i*.18]));add(new THREE.CylinderGeometry(.16+.03*v,.16+.03*v,2.2+v*.2,18),[0,0,0],[0,0,Math.PI/2])}}
+    {PART_MODEL_JS}
+    populatePart(g,cfg,m,dark);
     const ground=new THREE.Mesh(new THREE.CircleGeometry(4,64),new THREE.MeshStandardMaterial({{color:0x10161c,metalness:.5,roughness:.5}}));ground.rotation.x=-Math.PI/2;ground.position.y=-1.5;scene.add(ground);
     function tick(){{requestAnimationFrame(tick);controls.update();renderer.render(scene,camera)}}tick();window.addEventListener('resize',()=>{{camera.aspect=root.clientWidth/root.clientHeight;camera.updateProjectionMatrix();renderer.setSize(root.clientWidth,root.clientHeight)}});
     </script></body></html>"""
@@ -464,6 +457,47 @@ def stars(value):
     return "★" * value + "☆" * (5 - value)
 
 
+def build_option_projection_html(part_key, variant, color, shape):
+    """독립 3D와 같은 geometry를 SVG 삼각면으로 투영. WebGL 렌더러 없음."""
+    options=list(get_part_data()[part_key]["options"].values())
+    cfg = json.dumps(dict(optionShapes=[o["shape"] for o in options], optionBoxes=[diffuser_geometry(i,o["shape"]) for i,o in enumerate(options)],part=part_key,variant=variant,color=color,shape=shape,
+                          diffuser_boxes=diffuser_geometry(variant,shape) if part_key=='diffuser' else None)).replace('<','\\u003c')
+    # 기존 독립 프리뷰와 동일한 Three.js 모듈 경로 사용.
+    preview = build_part_preview_html(get_part_data(),
+                 {k:next(iter(v['options'])) for k,v in get_part_data().items()},part_key)
+    import re
+    importmap = re.search(r"<script type='importmap'>(.*?)</script>",preview,re.S).group(1)
+    return """<!doctype html><html><head><style>html,body{margin:0;background:transparent;width:100%;height:100%;overflow:hidden}svg{width:100%;height:100%;display:block}</style><script type="importmap">"""+importmap+"""</script></head><body><svg viewBox="0 0 200 125" preserveAspectRatio="xMidYMid meet" role="img" aria-label="공통 부품 모델의 2D 투영"></svg><script type="module">
+import * as THREE from 'three';
+"""+PART_MODEL_JS+"""
+const cfg="""+cfg+""",g=new THREE.Group();
+const m=new THREE.MeshBasicMaterial({color:cfg.color}),dark=new THREE.MeshBasicMaterial({color:0x090b0e});
+populatePart(g,cfg,m,dark);g.updateMatrixWorld(true);
+const forward=new THREE.Vector3(4,2.6,5.5).normalize(),right=new THREE.Vector3(5.5,0,-4).normalize(),up=new THREE.Vector3().crossVectors(forward,right);
+const faces=[];let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+g.traverse(obj=>{if(!obj.isMesh)return;const geometry=obj.geometry,position=geometry.attributes.position,index=geometry.index;
+ const count=index?index.count:position.count;
+ for(let i=0;i<count;i+=3){const points=[];for(let j=0;j<3;j++){const id=index?index.getX(i+j):i+j;points.push(new THREE.Vector3().fromBufferAttribute(position,id).applyMatrix4(obj.matrixWorld))}
+ const normal=new THREE.Vector3().crossVectors(points[1].clone().sub(points[0]),points[2].clone().sub(points[0]));
+ if(normal.dot(forward)<=0)continue;
+ const xy=points.map(p=>{const x=p.dot(right),y=-p.dot(up);minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);return [x,y]});
+ const shade=.55+.45*Math.abs(normal.normalize().dot(new THREE.Vector3(4,6,3).normalize()));
+ faces.push({xy,depth:points.reduce((a,p)=>a+p.dot(forward),0)/3,color:obj.material.color.clone().multiplyScalar(shade).getStyle()});
+ }});
+// 파츠별 모든 옵션의 공통 경계로 배율 계산: 옵션 크기 차이 유지.
+const bounds=new THREE.Box3();
+for(let v=0;v<3;v++){const group=new THREE.Group(),optionCfg={...cfg,variant:v,shape:cfg.optionShapes[v]};
+ if(cfg.part==='diffuser')optionCfg.diffuser_boxes=cfg.optionBoxes[v];
+ populatePart(group,optionCfg,m,dark);group.updateMatrixWorld(true);
+ group.traverse(obj=>{if(!obj.isMesh)return;const p=obj.geometry.attributes.position;for(let i=0;i<p.count;i++){const point=new THREE.Vector3().fromBufferAttribute(p,i).applyMatrix4(obj.matrixWorld);bounds.expandByPoint(new THREE.Vector3(point.dot(right),-point.dot(up),0))}});
+ group.traverse(obj=>{if(obj.isMesh)obj.geometry.dispose()});}
+const scale=Math.min(176/Math.max(.01,bounds.max.x-bounds.min.x),101/Math.max(.01,bounds.max.y-bounds.min.y));
+const cx=(bounds.min.x+bounds.max.x)/2,cy=(bounds.min.y+bounds.max.y)/2,svg=document.querySelector('svg');
+faces.sort((a,b)=>a.depth-b.depth).forEach(face=>{const polygon=document.createElementNS('http://www.w3.org/2000/svg','polygon');polygon.setAttribute('points',face.xy.map(([x,y])=>`${100+(x-cx)*scale},${62.5+(y-cy)*scale}`).join(' '));polygon.setAttribute('fill',face.color);polygon.setAttribute('stroke',face.color);polygon.setAttribute('stroke-width','.25');svg.appendChild(polygon)});
+g.traverse(obj=>{if(obj.isMesh)obj.geometry.dispose()});m.dispose();dark.dispose();
+</script></body></html>"""
+
+
 def render_option_svg(part_key, variant, color, shape=1.0):
     """세 옵션의 크기·플랩 수·표면 패턴이 확실히 다른 교육용 파츠 SVG를 만듭니다."""
     if part_key == "diffuser":
@@ -493,7 +527,8 @@ def render_part_options(parts, active_part, selections):
     for variant, ((option_key, option), column) in enumerate(zip(data["options"].items(), columns)):
         with column:
             tooltip = html.escape(option["explanation"], quote=True)
-            st.markdown(f"<div class='option-visual option-tip'>{render_option_svg(active_part, variant, option['color'], option['shape'])}<span class='tip-box'>{tooltip}</span></div><div class='option-name'><span class='hover-tip'>{option['label']} ⓘ<span class='tip-box'>{tooltip}</span></span></div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
+            components.html(build_option_projection_html(active_part, variant, option['color'], option['shape']), height=125, scrolling=False)
+            st.markdown(f"<div class='option-name'><span class='hover-tip'>{option['label']} ⓘ<span class='tip-box'>{tooltip}</span></span></div><div class='option-desc'>{html.escape(option['explanation'])}</div>", unsafe_allow_html=True)
             if selections[active_part] == option_key:
                 st.markdown("<div class='installed'>장착 중 ✓</div>", unsafe_allow_html=True)
             elif st.button("이 파츠 장착", key=f"equip_{active_part}_{option_key}", use_container_width=True):
