@@ -658,13 +658,13 @@ def main():
     st.markdown("<div class='garage-head'><div class='logo'>F1 <b>RACING SIMULATOR</b> · GARAGE</div><div class='step'>BUILD 02 · INTERACTIVE 3D SETUP</div></div>", unsafe_allow_html=True)
     nav_race, nav_home, nav_ai = st.columns(3)
     with nav_race:
-        if st.button("🏁 레이싱 시뮬레이션 시작", disabled=not (
+        if st.button("🏎️ 레이싱 시뮬레이션 시작", disabled=not (
             isinstance(st.session_state.get("my_car_config"), dict)
             and isinstance(st.session_state.get("my_car_performance"), dict)
         ), use_container_width=True):
             st.switch_page("pages/racing.py")
     with nav_home:
-        if st.button("⌂ 처음 화면으로 돌아가기", use_container_width=True):
+        if st.button("🏠 처음 화면으로 돌아가기", use_container_width=True):
             st.session_state.app_view = "home"
             st.rerun()
     with nav_ai:
