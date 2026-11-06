@@ -668,7 +668,7 @@ def main():
             st.session_state.app_view = "home"
             st.rerun()
     with nav_ai:
-        if st.button("AI 레이스 엔지니어와 대화하기", key="garage_ai_engineer", use_container_width=True):
+        if st.button("🤖 AI 레이스 엔지니어와 대화하기", key="garage_ai_engineer", use_container_width=True):
             open_ai_engineer()
     render_help_message()
 
