@@ -92,6 +92,24 @@ def apply_page_style():
 @media(max-width:760px){[data-testid="stHorizontalBlock"]:has([data-testid="stButton"]) {flex-wrap:wrap!important;gap:.5rem!important}
 [data-testid="stHorizontalBlock"]:has([data-testid="stButton"])>[data-testid="stColumn"] {min-width:min(100%,250px)!important;flex:1 1 250px!important}}
 
+/* AI GRID 설정 영역의 글자 색상만 밝게 조정 */
+div[data-testid="stVerticalBlockBorderWrapper"]:has(h4) {
+ color:#edf3fa!important;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(h4) h4,
+div[data-testid="stVerticalBlockBorderWrapper"]:has(h4) label,
+div[data-testid="stVerticalBlockBorderWrapper"]:has(h4) label p,
+div[data-testid="stVerticalBlockBorderWrapper"]:has(h4) [data-testid="stCaptionContainer"],
+div[data-testid="stVerticalBlockBorderWrapper"]:has(h4) [data-testid="stCaptionContainer"] p {
+ color:#dce6f3!important;
+ -webkit-text-fill-color:#dce6f3!important;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(h4) [data-testid="stRadio"] label,
+div[data-testid="stVerticalBlockBorderWrapper"]:has(h4) [data-testid="stRadio"] label p {
+ color:#f4f7fb!important;
+ -webkit-text-fill-color:#f4f7fb!important;
+}
+
 </style>""",unsafe_allow_html=True)
 
 
