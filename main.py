@@ -587,7 +587,7 @@ def open_ai_engineer():
 
 def main():
     """데이터 준비 → 사용자 입력 → 계산 → 3D 및 UI 렌더링 순서로 앱을 실행합니다."""
-    st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏁", layout="wide", initial_sidebar_state="collapsed")
+    st.set_page_config(page_title="F1 RACING SIMULATOR", page_icon="🏎️", layout="wide", initial_sidebar_state="collapsed")
     apply_game_css()
     if "app_view" not in st.session_state:
         st.session_state.app_view = "home"
@@ -614,19 +614,19 @@ def main():
         )
         left, right = st.columns(2, gap="medium")
         with left:
-            st.markdown("<div class='home-card'><h3>🏎 차량 설계하기</h3><p>Garage에서 파츠를 선택하고 내 F1 차량을 완성하세요.</p></div>", unsafe_allow_html=True)
+            st.markdown("<div class='home-card'><h3>🔧 차량 설계하기</h3><p>Garage에서 파츠를 선택하고 내 F1 차량을 완성하세요.</p></div>", unsafe_allow_html=True)
             if st.button("차량 설계하기", use_container_width=True):
                 st.session_state.app_view = "garage"
                 st.rerun()
         with right:
-            st.markdown("<div class='home-card home-locked'><h3>🏁 레이싱 시뮬레이션</h3><p>" +
+            st.markdown("<div class='home-card home-locked'><h3>🏎️ 레이싱 시뮬레이션</h3><p>" +
                         ("설계한 차량으로 테스트 서킷을 달려보세요." if ready else "🔒 먼저 차량을 설계해 주세요.") +
                         "</p></div>", unsafe_allow_html=True)
             if st.button("레이싱 시뮬레이션", disabled=not ready,
                          help=None if ready else "먼저 차량을 설계해 주세요.", use_container_width=True):
                 st.switch_page("pages/racing.py")
         # 기존 두 시작 버튼은 유지하고 그 아래에 상담 버튼을 추가합니다.
-        if st.button("AI 레이스 엔지니어와 대화하기", key="home_ai_engineer", use_container_width=True):
+        if st.button("🤖 AI 레이스 엔지니어와 대화하기", key="home_ai_engineer", use_container_width=True):
             open_ai_engineer()
         return
     parts = get_part_data()
